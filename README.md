@@ -1,4 +1,4 @@
-# Authzura: Dynamic Authorization for PostgreSQL
+# Authzura: PostgreSQL-based Authorization for Elixir
 
 Authzura is a standalone PostgreSQL authorization library for Elixir inspired by Hasura that provides dynamic role-based access control with Hasura-compatible permission syntax. Use it with ExRest, Phoenix LiveView, or any Elixir application.
 
