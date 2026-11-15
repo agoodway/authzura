@@ -37,19 +37,8 @@ defmodule Authzura.Sources.Hasura.RelationshipsTest do
           %{name: "author", using: %{foreign_key_constraint_on: "author_id"}},
           %{name: "editor", using: %{foreign_key_constraint_on: ["editor_id"]}},
           %{name: "bogus", using: %{foreign_key_constraint_on: "title"}},
-          %{
-            name: "nowhere",
-            using: %{
-              manual_configuration: %{
-                remote_table: {"public", "nope"},
-                column_mapping: %{id: "id"}
-              }
-            }
-          },
-          %{
-            name: "bad_column",
-            using: %{manual_configuration: %{remote_table: @users, column_mapping: %{id: "nope"}}}
-          },
+          HasuraFixture.object_relationship("nowhere", {"public", "nope"}, %{id: "id"}),
+          HasuraFixture.object_relationship("bad_column", @users, %{id: "nope"}),
           %{name: "weird", using: %{something: true}}
         ],
         array_relationships: [
@@ -59,15 +48,9 @@ defmodule Authzura.Sources.Hasura.RelationshipsTest do
               foreign_key_constraint_on: %{table: {"public", "comments"}, column: "article_id"}
             }
           },
-          %{
-            name: "events",
-            using: %{
-              manual_configuration: %{
-                remote_table: {"audit", "article_events"},
-                column_mapping: %{id: "article_id"}
-              }
-            }
-          }
+          HasuraFixture.array_relationship("events", {"audit", "article_events"}, %{
+            id: "article_id"
+          })
         ]
       },
       %{
@@ -104,23 +87,12 @@ defmodule Authzura.Sources.Hasura.RelationshipsTest do
       %{
         table: @view,
         object_relationships: [
-          %{
-            name: "author",
-            using: %{
-              manual_configuration: %{remote_table: @users, column_mapping: %{author_id: "id"}}
-            }
-          }
+          HasuraFixture.object_relationship("author", @users, %{author_id: "id"})
         ],
         array_relationships: [
-          %{
-            name: "events",
-            using: %{
-              manual_configuration: %{
-                remote_table: {"audit", "article_events"},
-                column_mapping: %{id: "article_id"}
-              }
-            }
-          }
+          HasuraFixture.array_relationship("events", {"audit", "article_events"}, %{
+            id: "article_id"
+          })
         ]
       }
     ])

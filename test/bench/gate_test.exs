@@ -22,12 +22,12 @@ defmodule Authzura.Bench.GateTest do
 
   test "the permission guard ignores request pagination and filters" do
     assert {[], [{"page-1000", :permission_filters_nothing}]} =
-             Gate.check([with_role(scenario("page-1000"), "open")])
+             Gate.check([with_role(Scenarios.fetch!("page-1000"), "open")])
   end
 
   test "a planted difference aborts that scenario by id" do
-    flat = scenario("flat-tenant")
-    other = scenario("columns-narrow")
+    flat = Scenarios.fetch!("flat-tenant")
+    other = Scenarios.fetch!("columns-narrow")
 
     drop_last = fn scenario ->
       %{authzura: {:ok, rows}} = result = Gate.run(scenario, Bench.instance())
@@ -44,7 +44,7 @@ defmodule Authzura.Bench.GateTest do
   end
 
   test "a Hasura 200 with errors aborts that scenario by id" do
-    %{read: read} = flat = scenario("flat-tenant")
+    %{read: read} = flat = Scenarios.fetch!("flat-tenant")
     hidden = %{flat | read: %{read | columns: ["internal_notes" | read.columns]}}
 
     assert {[], [{"flat-tenant", {:hasura_error, "validation-failed"}}]} = Gate.check([hidden])
@@ -66,7 +66,7 @@ defmodule Authzura.Bench.GateTest do
     :ok = Authzura.reload(name)
 
     assert {[], [{"flat-tenant", :admin_role_configured}]} =
-             Gate.check([scenario("flat-tenant")], instance: name)
+             Gate.check([Scenarios.fetch!("flat-tenant")], instance: name)
   end
 
   # The tests below need no Hasura: `mirror/1` stands Authzura's own rows in
@@ -76,7 +76,7 @@ defmodule Authzura.Bench.GateTest do
       no_author = mirror(fn rows -> Enum.map(rows, &Map.put(&1, "author", nil)) end)
 
       assert {[], [{"preload-object", {:empty_level, ["author"]}}]} =
-               Gate.check([scenario("preload-object")], run: no_author)
+               Gate.check([Scenarios.fetch!("preload-object")], run: no_author)
 
       no_org =
         mirror(fn rows ->
@@ -84,7 +84,7 @@ defmodule Authzura.Bench.GateTest do
         end)
 
       assert {[], [{"preload-nested-3", {:empty_level, ["comments", "author", "org"]}}]} =
-               Gate.check([scenario("preload-nested-3")], run: no_org)
+               Gate.check([Scenarios.fetch!("preload-nested-3")], run: no_org)
     end
 
     test "a missing nested row aborts the scenario" do
@@ -94,7 +94,7 @@ defmodule Authzura.Bench.GateTest do
         end)
 
       assert {[], [{"preload-array-limited", {:verdict, {:mismatch, _message}}}]} =
-               Gate.check([scenario("preload-array-limited")], run: drop_comment)
+               Gate.check([Scenarios.fetch!("preload-array-limited")], run: drop_comment)
     end
 
     test "a column difference aborts the scenario" do
@@ -102,10 +102,10 @@ defmodule Authzura.Bench.GateTest do
       changed = mirror(& &1, fn [row | rows] -> [%{row | "title" => "x"} | rows] end)
 
       assert {[], [{"flat-tenant", {:verdict, {:leak, _message}}}]} =
-               Gate.check([scenario("flat-tenant")], run: extra)
+               Gate.check([Scenarios.fetch!("flat-tenant")], run: extra)
 
       assert {[], [{"flat-tenant", {:verdict, {:mismatch, _message}}}]} =
-               Gate.check([scenario("flat-tenant")], run: changed)
+               Gate.check([Scenarios.fetch!("flat-tenant")], run: changed)
     end
 
     test "every level of every scenario is non-empty" do
@@ -125,8 +125,6 @@ defmodule Authzura.Bench.GateTest do
 
   defp no_org(%{"author" => author} = comment),
     do: %{comment | "author" => %{author | "org" => nil}}
-
-  defp scenario(id), do: Enum.find(Scenarios.all(), &(&1.id == id))
 
   defp with_role(scenario, role), do: %{scenario | auth: Scenarios.auth(role)}
 end

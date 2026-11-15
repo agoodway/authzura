@@ -9,6 +9,7 @@ defmodule Authzura.Bench.ScenariosTest do
     columns-narrow input-filter input-regex limit-permission page-1000
     preload-object preload-array-limited preload-nested-3
     input-selective input-pk input-rel-permission preload-large-batch
+    input-rel-broad-limit input-col-broad-limit
   )
 
   @array_relationships ["comments"]
@@ -55,6 +56,31 @@ defmodule Authzura.Bench.ScenariosTest do
              by_id["input-rel-permission"]
 
     assert by_id["preload-large-batch"].read.limit >= 1_000
+  end
+
+  test "the broad scenarios are broad-role LIMIT reads under an input filter" do
+    by_id = Map.new(Scenarios.all(), &{&1.id, &1})
+
+    assert %{read: %Read{table: {"public", "comments"}, limit: 100}, auth: {:jwt, _, "broad"}} =
+             by_id["input-rel-broad-limit"]
+
+    assert %{read: %Read{table: {"public", "articles"}, limit: 100}, auth: {:jwt, _, "broad"}} =
+             by_id["input-col-broad-limit"]
+
+    assert %{"title" => %{"_like" => "%7"}} = by_id["input-col-broad-limit"].read.where
+  end
+
+  test "with_org/2 replaces only the session's organization claim" do
+    %{auth: {:jwt, claims, "deep"}} =
+      scenario = Scenarios.fetch!("input-rel-permission")
+
+    %{auth: {:jwt, moved, "deep"}} = Scenarios.with_org(scenario, 17)
+
+    session = Map.fetch!(claims, "https://hasura.io/jwt/claims")
+    changed = Map.fetch!(moved, "https://hasura.io/jwt/claims")
+
+    assert changed == Map.put(session, "x-hasura-org-id", "17")
+    assert session["x-hasura-org-id"] == "3"
   end
 
   test "an input scenario's root is a public table, as all_input/4 requires" do

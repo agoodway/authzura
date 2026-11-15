@@ -10,7 +10,7 @@ defmodule Authzura.GenTest do
   use ExUnitProperties
 
   alias Authzura.Gen
-  alias Authzura.Gen.{Catalog, Filter}
+  alias Authzura.Gen.{Batch, Catalog, Filter}
   alias Authzura.Parity.Read
 
   @gen_roles Enum.map(0..15, &"gen_#{&1}")
@@ -25,6 +25,42 @@ defmodule Authzura.GenTest do
     assert take(Gen.request(Gen.batch(1)), 42, 50) == take(Gen.request(Gen.batch(1)), 42, 50)
     assert Gen.batch(2) == Gen.batch(2)
     refute Gen.batch(1) == Gen.batch(2)
+  end
+
+  test "permission draws include fully object-only nullable chains with margin across seeds" do
+    for table <- [
+          {"public", "users"},
+          {"public", "articles"},
+          {"public", "comments"},
+          {"public", "membership_notes"}
+        ],
+        seed <- [20_261_114, 20_261_115, 42, 1_337] do
+      filters = take(Filter.permission(table, join_lift: true), seed, 1_000)
+      nullable = Enum.count(filters, &nullable_object_chain?(&1, table, false))
+
+      assert nullable >= 150,
+             "#{inspect(table)}, seed #{seed}: only #{nullable}/1000 complete nullable object chains"
+
+      fallbacks =
+        Enum.count(filters, fn
+          %{"_not" => child} -> nullable_object_chain?(child, table, false)
+          _other -> false
+        end)
+
+      assert fallbacks >= 80,
+             "#{inspect(table)}, seed #{seed}: only #{fallbacks}/1000 negated nullable object chains"
+    end
+  end
+
+  test "join-lift weighting is opt-in and does not affect later default batches" do
+    for seed <- [2, 3, 6, 7, 20_261_115], limits <- [true, false] do
+      original = Batch.build(seed, limits: limits)
+      weighted = Batch.build(seed, limits: limits, join_lift: true)
+      refute weighted == original
+      assert Batch.build(seed, limits: limits) == original
+      assert Batch.build(seed, limits: limits, join_lift: false) == original
+      assert Gen.missing_coverage(weighted) == []
+    end
   end
 
   test "a batch has sixteen roles, plus a no-limit twin for each limited one" do
@@ -139,7 +175,7 @@ defmodule Authzura.GenTest do
   property "where-cases preload at most 2 deep, all/3 cases at most 3; every level is totally ordered" do
     batch = Gen.batch(1)
 
-    check all %{read: read} = c <- Gen.request(batch), max_runs: 300 do
+    check all(%{read: read} = c <- Gen.request(batch), max_runs: 300) do
       levels = Gen.levels(read)
       {max_depth, max_nodes} = if read.where, do: {2, 8}, else: {3, 16}
 
@@ -155,6 +191,26 @@ defmodule Authzura.GenTest do
       end
     end
   end
+
+  # This counts a narrow syntax shape, not compiler eligibility: a single
+  # object-only path ending in a column leaf, with a nullable fixture hop.
+  # Executed lift coverage remains the metamorphic property's responsibility.
+  defp nullable_object_chain?(filter, table, nullable?) when map_size(filter) == 1 do
+    [{name, child}] = Map.to_list(filter)
+
+    chain_hop(Catalog.relationship(table, name), name, child, table, nullable?)
+  end
+
+  defp nullable_object_chain?(_filter, _table, _nullable?), do: false
+
+  defp chain_hop({:object, target, _mapping}, name, child, _table, nullable?),
+    do:
+      nullable_object_chain?(child, target, nullable? or name in Catalog.nullable_relationships())
+
+  defp chain_hop(nil, name, _child, table, nullable?),
+    do: nullable? and name in Catalog.names(table)
+
+  defp chain_hop(_other, _name, _child, _table, _nullable?), do: false
 
   defp missing(cases, values, expected),
     do: expected -- (cases |> Enum.flat_map(values) |> Enum.uniq())

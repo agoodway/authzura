@@ -549,6 +549,15 @@ defmodule Authzura do
   Ecto's query cache and run unnamed, so request shapes never accumulate
   in a cache.
 
+  Eligible object-relationship permissions compile to inner joins on this
+  execute path only, while keeping the permission fence. A permission lifts
+  only in full; a non-liftable relationship or `_exists` keeps the entire
+  permission in its original `EXISTS` form. `scope_input/4` keeps its SQL.
+
+  Lifted and unlifted reads return the same set of rows. Their sequences
+  and pages are equal under a total order, when `order_by` ends in a unique
+  key such as `id`. With ties or no order, the sequence is unspecified.
+
   ## Index use
 
   `input_index_pushdown: true` applies as for `scope_input/4`: see
@@ -561,7 +570,18 @@ defmodule Authzura do
   @spec all_input(Queryable.t(), Session.t(), term(), keyword()) ::
           {:ok, [map()]} | {:error, reason() | Input.reason()}
   def all_input(queryable, %Session{} = session, input, opts \\ []),
-    do: execute_with(session, opts, :all, &Input.build(queryable, session, input, &1, &2))
+    do: __all_input__(queryable, session, input, opts, [])
+
+  @doc false
+  def __all_input__(queryable, %Session{} = session, input, opts, internal)
+      when is_list(internal),
+      do:
+        execute_with(
+          session,
+          opts,
+          :all,
+          &Input.build(queryable, session, input, &1, internal ++ &2)
+        )
 
   defp execute(queryable, session, opts, mode),
     do: execute_with(session, opts, mode, &Scope.build(queryable, session, &1, &2))

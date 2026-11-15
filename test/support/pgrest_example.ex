@@ -84,6 +84,8 @@ if Code.ensure_loaded?(PgRest) do
       alias Authzura.Session
       alias Ecto.{Query, Queryable}
 
+      require Query
+
       @typedoc "What `Endpoint` puts into the PgRest context."
       @type authz :: %{instance: atom(), session: Session.t()}
 
@@ -102,12 +104,16 @@ if Code.ensure_loaded?(PgRest) do
       defp unlimited(%Query{} = query, %Permission{limit: nil}), do: {:ok, query}
       defp unlimited(%Query{}, %Permission{}), do: {:error, :row_limit_unsupported}
 
-      @doc "Applies the role's row filter to `query`. The `Gate` has already accepted it."
+      @doc """
+      Applies the role's row filter to `query`. The `Gate` normally refuses a
+      denied request first; if PgRest scopes it anyway, no row matches (fail
+      closed) rather than raising.
+      """
       @spec scope(Query.t(), context()) :: Query.t()
-      def scope(%Query{} = query, %{authz: authz}) do
-        {:ok, filtered} = filter(query, authz)
-        filtered
-      end
+      def scope(%Query{} = query, %{authz: authz}), do: query |> filter(authz) |> scoped(query)
+
+      defp scoped({:ok, filtered}, _query), do: filtered
+      defp scoped({:error, _reason}, query), do: Query.where(query, false)
 
       @doc """
       Keeps the permitted columns of `row` and its embeds, nothing else. Output

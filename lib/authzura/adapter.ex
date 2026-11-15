@@ -146,7 +146,14 @@ defmodule Authzura.Adapter do
   """
   @callback index_pushdown?(Table.t(), Column.t()) :: boolean()
 
-  @optional_callbacks index_pushdown?: 2
+  @doc """
+  Whether equality between these columns preserves the target key's uniqueness.
+  Return true only when coercion and collation cannot make one local value
+  match distinct target keys. Optional: an adapter without it lifts no joins.
+  """
+  @callback lossless_join_pair?(Column.t(), Column.t()) :: boolean()
+
+  @optional_callbacks index_pushdown?: 2, lossless_join_pair?: 2
 
   @doc "Whether a column can be a relationship key in preload queries."
   @callback supported_key_kind?(Column.t()) :: boolean()

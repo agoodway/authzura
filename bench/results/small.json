@@ -472,10 +472,10 @@
         {
           "buffer_ratio": 1.965034965034965,
           "db_time": {
-            "authzura_ms": 9.108329564999988,
-            "cv": 0.19682219530807935,
-            "hasura_ms": 1.6239200680000019,
-            "ratio": 5.608853381692415
+            "authzura_ms": 5.508410642,
+            "cv": 0.05443065793227997,
+            "hasura_ms": 0.7332396089999993,
+            "ratio": 7.512429190114859
           },
           "id": "input-regex",
           "plans": {
@@ -508,13 +508,13 @@
           "statements": {
             "authzura": {
               "data": 1.0,
-              "db_ms": 9.108329564999988,
+              "db_ms": 5.508410642,
               "setup": 1.0,
               "transaction_control": 4.0
             },
             "hasura": {
               "data": 1.0,
-              "db_ms": 1.6239200680000019,
+              "db_ms": 0.7332396089999993,
               "setup": 0.0,
               "transaction_control": 0.0
             }
@@ -523,7 +523,7 @@
           "targets": {
             "buffers": "fail",
             "data_statements": "pass",
-            "db_time": "inconclusive",
+            "db_time": "fail",
             "indexes": "pass",
             "transaction_control": "not_applicable"
           },
@@ -917,10 +917,10 @@
         {
           "buffer_ratio": 215.57142857142858,
           "db_time": {
-            "authzura_ms": 10.089833727999991,
-            "cv": 0.14818509505574312,
-            "hasura_ms": 0.16619099000000007,
-            "ratio": 60.71227885458765
+            "authzura_ms": 6.7075532929999975,
+            "cv": 0.5920391524411075,
+            "hasura_ms": 0.062378801000000005,
+            "ratio": 107.52937192556806
           },
           "id": "input-selective",
           "plans": {
@@ -953,13 +953,13 @@
           "statements": {
             "authzura": {
               "data": 1.0,
-              "db_ms": 10.089833727999991,
+              "db_ms": 6.7075532929999975,
               "setup": 0.0,
               "transaction_control": 2.0
             },
             "hasura": {
               "data": 1.0,
-              "db_ms": 0.16619099000000007,
+              "db_ms": 0.062378801000000005,
               "setup": 0.0,
               "transaction_control": 0.0
             }
@@ -968,7 +968,7 @@
           "targets": {
             "buffers": "fail",
             "data_statements": "pass",
-            "db_time": "fail",
+            "db_time": "inconclusive",
             "indexes": "pass",
             "transaction_control": "not_applicable"
           },
@@ -977,10 +977,10 @@
         {
           "buffer_ratio": 411.3333333333333,
           "db_time": {
-            "authzura_ms": 7.012895213000004,
-            "cv": 0.1290742482687001,
-            "hasura_ms": 0.1435833549999999,
-            "ratio": 48.841979023264976
+            "authzura_ms": 3.8352748870000046,
+            "cv": 0.31926026968590865,
+            "hasura_ms": 0.06427881499999995,
+            "ratio": 59.666235088497004
           },
           "id": "input-pk",
           "plans": {
@@ -1013,13 +1013,13 @@
           "statements": {
             "authzura": {
               "data": 1.0,
-              "db_ms": 7.012895213000004,
+              "db_ms": 3.8352748870000046,
               "setup": 0.0,
               "transaction_control": 2.0
             },
             "hasura": {
               "data": 1.0,
-              "db_ms": 0.1435833549999999,
+              "db_ms": 0.06427881499999995,
               "setup": 0.0,
               "transaction_control": 0.0
             }
@@ -1028,26 +1028,31 @@
           "targets": {
             "buffers": "fail",
             "data_statements": "pass",
-            "db_time": "fail",
+            "db_time": "inconclusive",
             "indexes": "fail",
             "transaction_control": "not_applicable"
           },
           "verdict": "fail"
         },
         {
-          "buffer_ratio": 3.9324817518248176,
+          "buffer_ratio": 1.0,
           "db_time": {
-            "authzura_ms": 23.40656832800002,
-            "cv": 0.2013253985824846,
-            "hasura_ms": 10.832476891999992,
-            "ratio": 2.1607771298627236
+            "authzura_ms": 5.584930636000003,
+            "cv": 0.5267443373042056,
+            "hasura_ms": 5.722253493999999,
+            "ratio": 0.9760019617893572
           },
           "id": "input-rel-permission",
           "plans": {
             "authzura": [
               {
-                "shared_buffers": 30170,
+                "shared_buffers": 7672,
                 "table_scans": [
+                  [
+                    "organizations",
+                    "seq",
+                    null
+                  ],
                   [
                     "articles",
                     "seq",
@@ -1059,29 +1064,9 @@
                     "users_org_id_index"
                   ],
                   [
-                    "organizations",
-                    "seq",
-                    null
-                  ],
-                  [
                     "comments",
                     "index",
                     "comments_article_id_id_index"
-                  ],
-                  [
-                    "articles",
-                    "index",
-                    "articles_pkey"
-                  ],
-                  [
-                    "users",
-                    "index",
-                    "users_pkey"
-                  ],
-                  [
-                    "organizations",
-                    "seq",
-                    null
                   ]
                 ]
               }
@@ -1118,26 +1103,26 @@
           "statements": {
             "authzura": {
               "data": 1.0,
-              "db_ms": 23.40656832800002,
+              "db_ms": 5.584930636000003,
               "setup": 0.0,
               "transaction_control": 2.0
             },
             "hasura": {
               "data": 1.0,
-              "db_ms": 10.832476891999992,
+              "db_ms": 5.722253493999999,
               "setup": 0.0,
               "transaction_control": 0.0
             }
           },
           "status": "measured",
           "targets": {
-            "buffers": "fail",
+            "buffers": "pass",
             "data_statements": "pass",
             "db_time": "inconclusive",
             "indexes": "pass",
             "transaction_control": "not_applicable"
           },
-          "verdict": "fail"
+          "verdict": "inconclusive"
         },
         {
           "buffer_ratio": 0.468405485345523,
@@ -1213,6 +1198,136 @@
             "transaction_control": "not_applicable"
           },
           "verdict": "fail"
+        },
+        {
+          "buffer_ratio": 9.636170212765958,
+          "db_time": {
+            "authzura_ms": 2.563017259,
+            "cv": 0.1230127135318646,
+            "hasura_ms": 0.7132779939999999,
+            "ratio": 3.593293611410645
+          },
+          "id": "input-rel-broad-limit",
+          "plans": {
+            "authzura": [
+              {
+                "shared_buffers": 9058,
+                "table_scans": [
+                  [
+                    "comments",
+                    "index",
+                    "comments_pkey"
+                  ],
+                  [
+                    "articles",
+                    "index",
+                    "articles_pkey"
+                  ]
+                ]
+              }
+            ],
+            "hasura": [
+              {
+                "shared_buffers": 940,
+                "table_scans": [
+                  [
+                    "comments",
+                    "index",
+                    "comments_pkey"
+                  ],
+                  [
+                    "articles",
+                    "index",
+                    "articles_pkey"
+                  ]
+                ]
+              }
+            ]
+          },
+          "preload_levels": 0,
+          "statements": {
+            "authzura": {
+              "data": 1.0,
+              "db_ms": 2.563017259,
+              "setup": 0.0,
+              "transaction_control": 2.0
+            },
+            "hasura": {
+              "data": 1.0,
+              "db_ms": 0.7132779939999999,
+              "setup": 0.0,
+              "transaction_control": 0.0
+            }
+          },
+          "status": "measured",
+          "targets": {
+            "buffers": "fail",
+            "data_statements": "pass",
+            "db_time": "fail",
+            "indexes": "pass",
+            "transaction_control": "not_applicable"
+          },
+          "verdict": "fail"
+        },
+        {
+          "buffer_ratio": 1.0,
+          "db_time": {
+            "authzura_ms": 0.2649684699999999,
+            "cv": 0.05835565189226338,
+            "hasura_ms": 0.35144084000000014,
+            "ratio": 0.7539490003495319
+          },
+          "id": "input-col-broad-limit",
+          "plans": {
+            "authzura": [
+              {
+                "shared_buffers": 52,
+                "table_scans": [
+                  [
+                    "articles",
+                    "index",
+                    "articles_pkey"
+                  ]
+                ]
+              }
+            ],
+            "hasura": [
+              {
+                "shared_buffers": 52,
+                "table_scans": [
+                  [
+                    "articles",
+                    "index",
+                    "articles_pkey"
+                  ]
+                ]
+              }
+            ]
+          },
+          "preload_levels": 0,
+          "statements": {
+            "authzura": {
+              "data": 1.0,
+              "db_ms": 0.2649684699999999,
+              "setup": 0.0,
+              "transaction_control": 2.0
+            },
+            "hasura": {
+              "data": 1.0,
+              "db_ms": 0.35144084000000014,
+              "setup": 0.0,
+              "transaction_control": 0.0
+            }
+          },
+          "status": "measured",
+          "targets": {
+            "buffers": "pass",
+            "data_statements": "pass",
+            "db_time": "pass",
+            "indexes": "pass",
+            "transaction_control": "not_applicable"
+          },
+          "verdict": "pass"
         }
       ]
     },
@@ -1680,12 +1795,12 @@
           "verdict": "pass"
         },
         {
-          "buffer_ratio": 1.965034965034965,
+          "buffer_ratio": 1.956824512534819,
           "db_time": {
-            "authzura_ms": 5.017848326000001,
-            "cv": 0.10397465255542682,
-            "hasura_ms": 0.6211333150000009,
-            "ratio": 8.07853677273774
+            "authzura_ms": 5.624325773999998,
+            "cv": 0.11987775208880629,
+            "hasura_ms": 0.7608574439999998,
+            "ratio": 7.392088778722654
           },
           "id": "input-regex",
           "plans": {
@@ -1703,7 +1818,7 @@
             ],
             "hasura": [
               {
-                "shared_buffers": 715,
+                "shared_buffers": 718,
                 "table_scans": [
                   [
                     "articles",
@@ -1718,13 +1833,13 @@
           "statements": {
             "authzura": {
               "data": 1.0,
-              "db_ms": 5.017848326000001,
+              "db_ms": 5.624325773999998,
               "setup": 1.0,
               "transaction_control": 4.0
             },
             "hasura": {
               "data": 1.0,
-              "db_ms": 0.6211333150000009,
+              "db_ms": 0.7608574439999998,
               "setup": 0.0,
               "transaction_control": 0.0
             }
@@ -2127,10 +2242,10 @@
         {
           "buffer_ratio": 1.0,
           "db_time": {
-            "authzura_ms": 0.04665093000000002,
-            "cv": 0.41174017523011563,
-            "hasura_ms": 0.06283735099999992,
-            "ratio": 0.7424076485974096
+            "authzura_ms": 0.03690312000000001,
+            "cv": 0.3438283699952911,
+            "hasura_ms": 0.048784746,
+            "ratio": 0.7564479273910746
           },
           "id": "input-selective",
           "plans": {
@@ -2163,13 +2278,13 @@
           "statements": {
             "authzura": {
               "data": 1.0,
-              "db_ms": 0.04665093000000002,
+              "db_ms": 0.03690312000000001,
               "setup": 0.0,
               "transaction_control": 2.0
             },
             "hasura": {
               "data": 1.0,
-              "db_ms": 0.06283735099999992,
+              "db_ms": 0.048784746,
               "setup": 0.0,
               "transaction_control": 0.0
             }
@@ -2187,10 +2302,10 @@
         {
           "buffer_ratio": 1.0,
           "db_time": {
-            "authzura_ms": 0.037510781999999986,
-            "cv": 0.27769888617738064,
-            "hasura_ms": 0.058560846999999965,
-            "ratio": 0.6405437066168119
+            "authzura_ms": 0.03902733500000005,
+            "cv": 0.2840713325753769,
+            "hasura_ms": 0.04989964200000004,
+            "ratio": 0.7821165330204176
           },
           "id": "input-pk",
           "plans": {
@@ -2223,13 +2338,13 @@
           "statements": {
             "authzura": {
               "data": 1.0,
-              "db_ms": 0.037510781999999986,
+              "db_ms": 0.03902733500000005,
               "setup": 0.0,
               "transaction_control": 2.0
             },
             "hasura": {
               "data": 1.0,
-              "db_ms": 0.058560846999999965,
+              "db_ms": 0.04989964200000004,
               "setup": 0.0,
               "transaction_control": 0.0
             }
@@ -2245,19 +2360,24 @@
           "verdict": "inconclusive"
         },
         {
-          "buffer_ratio": 3.9324817518248176,
+          "buffer_ratio": 1.0,
           "db_time": {
-            "authzura_ms": 8.754735595000003,
-            "cv": 0.10937738904217484,
-            "hasura_ms": 4.317840759999996,
-            "ratio": 2.027572595104228
+            "authzura_ms": 4.789317486000005,
+            "cv": 0.08377295268770196,
+            "hasura_ms": 4.713276018000002,
+            "ratio": 1.0161334637966462
           },
           "id": "input-rel-permission",
           "plans": {
             "authzura": [
               {
-                "shared_buffers": 30170,
+                "shared_buffers": 7672,
                 "table_scans": [
+                  [
+                    "organizations",
+                    "seq",
+                    null
+                  ],
                   [
                     "articles",
                     "seq",
@@ -2269,29 +2389,9 @@
                     "users_org_id_index"
                   ],
                   [
-                    "organizations",
-                    "seq",
-                    null
-                  ],
-                  [
                     "comments",
                     "index",
                     "comments_article_id_id_index"
-                  ],
-                  [
-                    "articles",
-                    "index",
-                    "articles_pkey"
-                  ],
-                  [
-                    "users",
-                    "index",
-                    "users_pkey"
-                  ],
-                  [
-                    "organizations",
-                    "seq",
-                    null
                   ]
                 ]
               }
@@ -2328,26 +2428,26 @@
           "statements": {
             "authzura": {
               "data": 1.0,
-              "db_ms": 8.754735595000003,
+              "db_ms": 4.789317486000005,
               "setup": 0.0,
               "transaction_control": 2.0
             },
             "hasura": {
               "data": 1.0,
-              "db_ms": 4.317840759999996,
+              "db_ms": 4.713276018000002,
               "setup": 0.0,
               "transaction_control": 0.0
             }
           },
           "status": "measured",
           "targets": {
-            "buffers": "fail",
+            "buffers": "pass",
             "data_statements": "pass",
-            "db_time": "fail",
+            "db_time": "pass",
             "indexes": "pass",
             "transaction_control": "not_applicable"
           },
-          "verdict": "fail"
+          "verdict": "pass"
         },
         {
           "buffer_ratio": 0.46890982503364737,
@@ -2423,6 +2523,136 @@
             "transaction_control": "not_applicable"
           },
           "verdict": "fail"
+        },
+        {
+          "buffer_ratio": 9.636170212765958,
+          "db_time": {
+            "authzura_ms": 2.3654507080000027,
+            "cv": 0.20325324078467705,
+            "hasura_ms": 0.544039473,
+            "ratio": 4.3479394885745775
+          },
+          "id": "input-rel-broad-limit",
+          "plans": {
+            "authzura": [
+              {
+                "shared_buffers": 9058,
+                "table_scans": [
+                  [
+                    "comments",
+                    "index",
+                    "comments_pkey"
+                  ],
+                  [
+                    "articles",
+                    "index",
+                    "articles_pkey"
+                  ]
+                ]
+              }
+            ],
+            "hasura": [
+              {
+                "shared_buffers": 940,
+                "table_scans": [
+                  [
+                    "comments",
+                    "index",
+                    "comments_pkey"
+                  ],
+                  [
+                    "articles",
+                    "index",
+                    "articles_pkey"
+                  ]
+                ]
+              }
+            ]
+          },
+          "preload_levels": 0,
+          "statements": {
+            "authzura": {
+              "data": 1.0,
+              "db_ms": 2.3654507080000027,
+              "setup": 0.0,
+              "transaction_control": 2.0
+            },
+            "hasura": {
+              "data": 1.0,
+              "db_ms": 0.544039473,
+              "setup": 0.0,
+              "transaction_control": 0.0
+            }
+          },
+          "status": "measured",
+          "targets": {
+            "buffers": "fail",
+            "data_statements": "pass",
+            "db_time": "inconclusive",
+            "indexes": "pass",
+            "transaction_control": "not_applicable"
+          },
+          "verdict": "fail"
+        },
+        {
+          "buffer_ratio": 1.0,
+          "db_time": {
+            "authzura_ms": 0.21615982799999994,
+            "cv": 0.09020978636499423,
+            "hasura_ms": 0.2628200069999999,
+            "ratio": 0.822463367486327
+          },
+          "id": "input-col-broad-limit",
+          "plans": {
+            "authzura": [
+              {
+                "shared_buffers": 52,
+                "table_scans": [
+                  [
+                    "articles",
+                    "index",
+                    "articles_pkey"
+                  ]
+                ]
+              }
+            ],
+            "hasura": [
+              {
+                "shared_buffers": 52,
+                "table_scans": [
+                  [
+                    "articles",
+                    "index",
+                    "articles_pkey"
+                  ]
+                ]
+              }
+            ]
+          },
+          "preload_levels": 0,
+          "statements": {
+            "authzura": {
+              "data": 1.0,
+              "db_ms": 0.21615982799999994,
+              "setup": 0.0,
+              "transaction_control": 2.0
+            },
+            "hasura": {
+              "data": 1.0,
+              "db_ms": 0.2628200069999999,
+              "setup": 0.0,
+              "transaction_control": 0.0
+            }
+          },
+          "status": "measured",
+          "targets": {
+            "buffers": "pass",
+            "data_statements": "pass",
+            "db_time": "pass",
+            "indexes": "pass",
+            "transaction_control": "not_applicable"
+          },
+          "verdict": "pass"
         }
       ]
     },

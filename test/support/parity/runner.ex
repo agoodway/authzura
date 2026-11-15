@@ -43,6 +43,7 @@ defmodule Authzura.Parity.Runner do
 
   alias Authzura.{JWT, Session}
   alias Authzura.Parity.{Fixture, Hasura, Read}
+  alias Authzura.Test.InternalRead
   alias Ecto.Query
 
   @type hasura_result :: Hasura.result() | {:error, String.t(), String.t()}
@@ -82,10 +83,10 @@ defmodule Authzura.Parity.Runner do
     Map.new(row, fn {key, value} -> {Map.get(back, key, key), value} end)
   end
 
-  @doc "Runs `read` through Authzura on `instance`."
-  @spec authzura(Read.t(), Hasura.auth(), atom()) :: {:ok, [map()]} | {:error, term()}
-  def authzura(%Read{} = read, auth, instance) do
-    with {:ok, session} <- session(auth), do: execute(read, session, instance)
+  @doc "Runs `read` through Authzura on `instance`; `opts` reach the input path (`join_lift:`)."
+  @spec authzura(Read.t(), Hasura.auth(), atom(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  def authzura(%Read{} = read, auth, instance, opts \\ []) do
+    with {:ok, session} <- session(auth), do: execute(read, session, instance, opts)
   end
 
   @doc "The Authzura session for `auth`."
@@ -189,19 +190,31 @@ defmodule Authzura.Parity.Runner do
     "{ #{Enum.join(columns ++ nested, " ")} }"
   end
 
-  defp execute(%Read{table: {"public", name}, where: where} = read, session, instance)
+  # Default reads exercise the public entry point and its execute span.
+  defp execute(%Read{table: {"public", name}, where: where} = read, session, instance, [])
        when not is_nil(where),
        do: Authzura.all_input(name, session, input(read), instance: instance)
 
-  defp execute(%Read{columns: columns, relationships: relationships} = read, session, instance),
-    do:
-      read
-      |> query()
-      |> Authzura.all(session,
-        instance: instance,
-        columns: columns,
-        preload: preload(relationships)
-      )
+  # Internal comparisons can disable lifting without exposing a public option.
+  defp execute(%Read{table: {"public", name}, where: where} = read, session, instance, opts)
+       when not is_nil(where),
+       do: InternalRead.all_input(name, session, input(read), instance, opts)
+
+  # Non-input reads ignore the internal join_lift option.
+  defp execute(
+         %Read{columns: columns, relationships: relationships} = read,
+         session,
+         instance,
+         _opts
+       ) do
+    read
+    |> query()
+    |> Authzura.all(session,
+      instance: instance,
+      columns: columns,
+      preload: preload(relationships)
+    )
+  end
 
   @doc """
   The root query `read` describes for `Authzura.all/3`: its table, sort

@@ -39,12 +39,7 @@ defmodule Authzura.Integration.OpaqueColumnsTest do
       %{
         table: @kinds,
         array_relationships: [
-          %{
-            name: "opaque",
-            using: %{
-              manual_configuration: %{remote_table: @opaque_values, column_mapping: %{id: "id"}}
-            }
-          }
+          HasuraFixture.array_relationship("opaque", @opaque_values, %{id: "id"})
         ],
         select_permissions: HasuraFixture.select_permissions("user", ["id"])
       },

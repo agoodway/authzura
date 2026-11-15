@@ -32,15 +32,7 @@ defmodule Authzura.Integration.PreloadConsistencyTest do
         object_relationships: [
           %{name: "article", using: %{foreign_key_constraint_on: "article_id"}},
           # Not unique on the target: every comment of the same article.
-          %{
-            name: "sibling",
-            using: %{
-              manual_configuration: %{
-                remote_table: @comments,
-                column_mapping: %{article_id: "article_id"}
-              }
-            }
-          }
+          HasuraFixture.object_relationship("sibling", @comments, %{article_id: "article_id"})
         ],
         select_permissions: comment_permissions
       }

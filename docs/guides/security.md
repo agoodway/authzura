@@ -56,6 +56,28 @@ evaluated on permitted rows only; the opt-in
 [`input_index_pushdown`](#input-index-push-down) lets equality and `IN`
 comparisons on plain columns also run outside the fence.
 
+On `all_input/4`, fully liftable relationship permissions compile as inner
+joins. The positive permission conjunct stays, and the CASE `WHEN` re-checks
+the whole chain's mapping equalities and target conditions, never negated:
+a true `WHEN` implies the row is permitted. The 10% estimate wrapper keeps
+that CASE intact. A non-liftable hop keeps the whole permission as EXISTS;
+`scope_input/4` is not lifted. Lifted and unlifted reads return identical row
+sets (and identical sequences under a total order).
+
+**Regression evidence.** The PostgreSQL 18 suite checks deep, partially
+liftable (EXISTS fallback), nullable and partitioned relationships with
+push-down off/on and lifting enabled/disabled across 18 planner regimes.
+Each captured read has a matched control that removes only its CASE guard.
+The suite reports the settings where that control raises on a hidden row
+for each shape/push-down/lift combination, and requires generic, forced
+parallel and available JIT regimes to discriminate. Fenced reads must
+succeed; parallel plans must launch workers and JIT plans must compile
+functions. JIT cases skip when unavailable. Evidence against hidden-row
+evaluation applies to the settings that discriminate per shape; this is
+regression evidence, not a proof for every plan. Hidden-row evidence is PG18
+only; CI on PG18 is the version check. These tests were not run on PG16/17.
+The guarantee rests on the CASE evaluation order above.
+
 ## Input index push-down
 
 The fence above has a cost: Postgres cannot see inside a `CASE`, so it cannot
@@ -96,9 +118,12 @@ resolved). `citext` equality is not leakproof, so `get/4` keeps the timing
 channel described below for it too. The leakproof test is read
 from the catalog at load, per type, and both it and the table kind are part of
 the structure fingerprint, so a changed catalog reloads the snapshot.
-A generation loaded before the owner's DDL keeps its push-down decisions
-until the next reload (a poll noticing the changed fingerprint, or
-`Authzura.reload/1`); `max_staleness` bounds that window.
+A generation loaded before the owner's DDL keeps its push-down and join-lift
+decisions until the next reload (a poll noticing the changed fingerprint, or
+`Authzura.reload/1`); `max_staleness` bounds that window. Adding an inheritance
+child can leave a loaded generation treating the parent key as strict: a
+lifted read can repeat root rows until reload. The WHEN still checks real
+rows, so this does not expose hidden rows.
 
 **The trade-off.** A leakproof comparison cannot raise or reveal its operand,
 but it may now be evaluated on rows the role cannot see. With an index on the
@@ -112,10 +137,12 @@ from probing a wide range of hidden keys; it bounds the signal per request and
 does not remove the channel, so rate limiting stays the consumer's job. The
 order of tied rows under `LIMIT` is as unspecified as ever and may differ.
 
-**What it does not change.** Roles whose permission goes through a
-relationship (an `EXISTS`) still pay about 2-3 times on input reads in both
-modes, because the `CASE` fence evaluates the permission a second time.
-Push-down does not help there; it is a known limitation of the fence.
+**What it does not change.** Unlifted relationship permissions still evaluate
+EXISTS again inside CASE; push-down does not remove that cost. Fully lifted
+`all_input/4` permissions avoid the second EXISTS evaluation: measured
+`input-rel-permission` DB time is 0.98/1.02x Hasura at small (default/push-down;
+default inconclusive, CV 0.53), with 1.00x buffers. Broad-limit remains a known gap (3.59-6.95x DB time,
+9.64-9.73x buffers). See [benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md).
 
 It is off by default. Set it in application config, never from request input;
 it is an instance option and no call or input can turn it on.

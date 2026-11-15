@@ -166,6 +166,10 @@ defmodule Authzura.Gen.Catalog do
   @spec atoms() :: [atom()]
   def atoms, do: @atoms |> Map.values() |> Enum.uniq()
 
+  @doc "Fixture relationship names whose mappings exercise nullable keys."
+  @spec nullable_relationships() :: [String.t()]
+  def nullable_relationships, do: ~w(editor manager membership)
+
   @doc "The relationships of `table`, sorted by name."
   @spec relationships(table()) :: [{String.t(), relationship()}]
   def relationships(table), do: @relationships |> Map.get(table, %{}) |> Enum.sort()

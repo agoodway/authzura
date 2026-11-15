@@ -1,6 +1,6 @@
 # Benchmark triage
 
-Full rerun of `MIX_ENV=bench mix authzura.bench` (2026-11-15): `--scale small`
+Historical pre-join-lift rerun of `MIX_ENV=bench mix authzura.bench` (2026-11-15): `--scale small`
 and `--scale large`, each in both modes (`default`, `read_only_connection`),
 `--requests 1000`, 17 scenarios, Postgres 18.6 and Hasura v2.51.6 in local
 containers, seed 20261114. The CV is the sample SD of the paired
@@ -223,7 +223,7 @@ by roughly ±40 % between runs and up to 3.6 ms in a fresh container.
   control for `L = 0`, from `Measure.statements/4` (Authzura only, so it
   runs without a Hasura).
 
-### input-selective, input-pk, input-rel-permission (default, read_only_connection): the input fence
+### input-selective, input-pk, input-rel-permission: the input fence (before join-lift)
 
 - **Scenarios:** `input-selective` (an input filter on `author_id`),
   `input-pk` (a primary-key list through the input path, the statement shape
@@ -262,9 +262,11 @@ by roughly ±40 % between runs and up to 3.6 ms in a fresh container.
   (0.74× small, 0.65× large) and `input-pk` (0.64× small, 0.61× large) are
   faster than Hasura (DB-time verdicts inconclusive on CV at small, and for
   `input-pk` at large). With it off they remain the documented cost of the
-  default fence (above). `input-rel-permission` stays a documented gap (about
-  2-3.4× with the option on): a relationship permission is an `EXISTS`, never
-  pushed down, by design. `input-regex` is unchanged (regex is always fenced).
+  default fence (above). The `input-rel-permission` DB-time/buffer gap is
+  closed for buffers by join-lift (see "relationship fence: after"); DB time
+  passes where conclusive, with small default inconclusive. Its large-scale
+  index target still fails. Unliftable permissions retain EXISTS SubPlans.
+  `input-regex` is unchanged (regex is always fenced).
 
 ### preload-large-batch (default, read_only_connection): DB time at small
 
@@ -344,3 +346,173 @@ Authzura's equivalent (Ecto decoding and stitching, about 4.9 ms next to
 trips (four or more per Authzura read against Hasura's one statement). A
 single-statement preload would save the per-statement round trips, which
 this benchmark does not measure.
+
+### relationship fence: before
+
+Baseline for the relationship-fence work, taken before any change to `lib/`.
+`MIX_ENV=bench mix authzura.bench --scale <small|large> --mode <default|input_index_pushdown> --no-compose --only input-rel-permission,input-rel-broad-limit,input-col-broad-limit,input-regex`
+(2026-11-15), `--requests 200` (the default), Postgres 18.6 and Hasura
+v2.51.6 in local containers, seed 20261114. `REPORT.md` and `results/` were
+restored afterwards: these figures are recorded here only. Medians in
+DB ms per request; CV is that of the paired per-repetition ratios; buffers
+are the summed shared buffers of the data statements (Hasura / Authzura).
+The verdict column is the scenario's verdict (all targets), not the DB-time
+verdict: a scenario that fails on buffers or indexes shows `fail` whatever
+its DB time.
+All four scenarios passed the parity gate in every run.
+
+| scale | mode | scenario | Hasura ms | Authzura ms | ratio | CV | buffers H | buffers A | buffer ratio | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| small | default | input-regex | 1.026 | 6.952 | 6.78 | 21.9% | 718 | 1405 | 1.96 | fail |
+| small | default | input-rel-permission | 5.617 | 12.423 | 2.21 | 12.3% | 7672 | 30170 | 3.93 | fail |
+| small | default | input-rel-broad-limit | 0.536 | 5.299 | 9.88 | 13.9% | 940 | 1571 | 1.67 | fail |
+| small | default | input-col-broad-limit | 0.314 | 0.220 | 0.70 | 16.6% | 52 | 52 | 1.00 | inconclusive |
+| small | input_index_pushdown | input-regex | 0.895 | 7.173 | 8.02 | 29.8% | 718 | 1405 | 1.96 | fail |
+| small | input_index_pushdown | input-rel-permission | 9.993 | 16.771 | 1.68 | 13.9% | 7672 | 30170 | 3.93 | fail |
+| small | input_index_pushdown | input-rel-broad-limit | 0.813 | 7.902 | 9.72 | 25.2% | 940 | 1571 | 1.67 | fail |
+| small | input_index_pushdown | input-col-broad-limit | 0.327 | 0.332 | 1.02 | 24.2% | 52 | 52 | 1.00 | inconclusive |
+| large | default | input-regex | 1.259 | 2.317 | 1.84 | 20.1% | 984 | 984 | 1.00 | inconclusive |
+| large | default | input-rel-permission | 4.147 | 12.371 | 2.98 | 18.6% | 7447 | 34358 | 4.61 | fail |
+| large | default | input-rel-broad-limit | 0.909 | 7.847 | 8.63 | 29.3% | 1368 | 13708 | 10.02 | fail |
+| large | default | input-col-broad-limit | 0.379 | 0.341 | 0.90 | 17.4% | 53 | 53 | 1.00 | inconclusive |
+| large | input_index_pushdown | input-regex | 1.466 | 2.521 | 1.72 | 21.4% | 984 | 984 | 1.00 | inconclusive |
+| large | input_index_pushdown | input-rel-permission | 4.193 | 12.659 | 3.02 | 21.3% | 7447 | 34358 | 4.61 | fail |
+| large | input_index_pushdown | input-rel-broad-limit | 0.850 | 5.722 | 6.73 | 28.0% | 1368 | 13708 | 10.02 | fail |
+| large | input_index_pushdown | input-col-broad-limit | 0.352 | 0.280 | 0.80 | 22.4% | 53 | 53 | 1.00 | inconclusive |
+
+`input-rel-broad-limit` before join-lift at small: Authzura seq-scanned
+`articles` (the permission evaluated a second time), where Hasura read it
+through `articles_pkey`; the `indexes` target failed there. At large both
+read it through the index (Authzura twice), and the buffers were 10.02x.
+
+Plan shape, small, `raw_plan` custom and generic: `input-rel-permission`
+(organization 3, and organizations 1..40 in the regression test) does not
+walk `comments_pkey`; `input-rel-broad-limit` and `input-col-broad-limit`
+do. The buffer pin `input-rel-permission buffers are at most 1.5x Hasura's`
+(`test/bench/hasura_regression_test.exs`) failed before join-lift: 3.93x at
+small. It now passes at 1.00x (see the after entry). Most before DB-time CVs
+are above 15 %, so those ratios are indicative.
+
+
+### Relationship fence: estimate wrapper
+
+- **Target:** eliminate primary-key-walk plans for lifted relationship input
+  reads while keeping the CASE fence and paired broad-case DB-time ratios
+  at or below 1.5× the unlifted control.
+- **Evidence (Task 2, PostgreSQL 16.16, small scale only):** plain join-lift
+  produced 8 of 40 primary-key-walk plans. Casting the fence with `::int = 1`
+  regressed the broad and column-broad cases to 2.93× and 17.95× their
+  respective controls. The selected wrapper produced 0 of 40 walks under
+  both custom and generic plans; median paired DB-time ratios were 0.36×
+  for `input-rel-broad-limit` and 1.12× for `input-col-broad-limit`.
+- **Class:** `plan-shape`.
+- **Confirmed cause:** the plain boolean CASE has a default selectivity of
+  0.5, which can steer the lifted read into a primary-key walk. The selected
+  wrapper provides a 10% estimate while preserving CASE evaluation:
+
+  ```sql
+  (CASE WHEN ... THEN ... ELSE false END)::int = ANY('{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}'::int[])
+  ```
+
+  The array contains twenty ones (`'{1 x20}'` in shorthand).
+- **Scope:** fully lifted `all_input/4` reads only. Lifting is all-or-nothing
+  per permission: any remaining relationship or `_exists` keeps the whole
+  permission in its original EXISTS form, without the estimate wrapper.
+  Partial lifting with this wrapper regressed to 2.15× in the spike, which
+  is why it is excluded. `scope_input/4` and reads without a lift retain
+  their original SQL.
+- **Status:** shipped after the generated Ecto SQL passed the PG18 release
+  gate below. The spike itself was PG16 small only; no PG17, PG18 or
+  large-scale spike results are claimed. CI on PG18 is the version check.
+
+
+### relationship fence: after
+
+Postgres 18.6, Hasura v2.51.6, seed 20261114, `--requests 1000`, medians
+from `REPORT.md` and `results/`. Ratios are Authzura / Hasura; verdicts
+cover all targets. Before figures for relationship, broad, column-broad and
+regex are in the 200-request entry above; selective/pk are in the earlier
+input-fence entry. Only default and `input_index_pushdown` were remeasured
+here; the report's `read_only_connection` entries predate join-lift.
+
+| scale | mode | scenario | DB ratio | buffers (A / H) | verdict |
+|---|---|---|---|---|---|
+| small | default | input-regex | 7.51 | 1.97× | fail (buffers fail, db_time fail) |
+| small | default | input-selective | 107.53 | 215.57× | fail (buffers fail, db_time inconclusive) |
+| small | default | input-pk | 59.67 | 411.33× | fail (buffers fail, db_time inconclusive, indexes fail) |
+| small | default | input-rel-permission | 0.98 | 1.00× | inconclusive (db_time inconclusive) |
+| small | default | input-rel-broad-limit | 3.59 | 9.64× | fail (buffers fail, db_time fail) |
+| small | default | input-col-broad-limit | 0.75 | 1.00× | pass |
+| small | input_index_pushdown | input-regex | 7.39 | 1.96× | fail (buffers fail, db_time fail) |
+| small | input_index_pushdown | input-selective | 0.76 | 1.00× | inconclusive (db_time inconclusive) |
+| small | input_index_pushdown | input-pk | 0.78 | 1.00× | inconclusive (db_time inconclusive) |
+| small | input_index_pushdown | input-rel-permission | 1.02 | 1.00× | pass |
+| small | input_index_pushdown | input-rel-broad-limit | 4.35 | 9.64× | fail (buffers fail, db_time inconclusive) |
+| small | input_index_pushdown | input-col-broad-limit | 0.82 | 1.00× | pass |
+| large | default | input-regex | 1.33 | 1.00× | fail (db_time fail) |
+| large | default | input-selective | 1281.65 | 1675.56× | fail (buffers fail, db_time inconclusive) |
+| large | default | input-pk | 559.11 | 3105.25× | fail (buffers fail, db_time inconclusive, indexes fail) |
+| large | default | input-rel-permission | 1.14 | 1.00× | fail (indexes fail) |
+| large | default | input-rel-broad-limit | 6.95 | 9.73× | fail (buffers fail, db_time fail) |
+| large | default | input-col-broad-limit | 0.82 | 1.00× | pass |
+| large | input_index_pushdown | input-regex | 1.36 | 1.00× | inconclusive (db_time inconclusive) |
+| large | input_index_pushdown | input-selective | 0.80 | 1.00× | inconclusive (db_time inconclusive) |
+| large | input_index_pushdown | input-pk | 0.75 | 1.00× | pass |
+| large | input_index_pushdown | input-rel-permission | 0.97 | 1.00× | fail (db_time inconclusive, indexes fail) |
+| large | input_index_pushdown | input-rel-broad-limit | 6.44 | 9.73× | fail (buffers fail, db_time inconclusive) |
+| large | input_index_pushdown | input-col-broad-limit | 0.80 | 1.00× | pass |
+
+- **input-rel-permission: buffer gap closed; DB time passes where conclusive.** Small default
+  2.21x → 0.98x (CV 0.53, inconclusive), push-down 1.68x → 1.02x;
+  buffers 3.93x → 1.00x. Large default 2.98x → 1.14x, push-down
+  3.02x → 0.97x; buffers 4.61x → 1.00x. The large scenario still fails
+  the index target: Authzura seq-scans `organizations` where Hasura uses
+  `organizations_pkey`. The ≤ 1.5x buffer pin now passes at 1.00x.
+- **input-rel-broad-limit: open, documented gap.** Small default
+  9.88x → 3.59x, push-down 9.72x → 4.35x; buffers 1.67x → 9.64x.
+  Large default 8.63x → 6.95x, push-down 6.73x → 6.44x; buffers
+  10.02x → 9.73x. Still fails the 1.25x DB-time and 1.5x buffer targets.
+  At small the lifted statement reads 9058 buffers against Hasura's 940:
+  Hasura walks `comments_pkey` with early exit and evaluates permission
+  lazily. DB time improved, including to 0.39–0.45x the unlifted control
+  in the release gate; this gap is not fixed.
+- **Unchanged SQL.** Column-broad has no relationship: 0.75/0.82x small,
+  0.82/0.80x large (default/push-down), 1.00x buffers, pass. Regex,
+  selective and pk also have no relationship; captured lifted/unlifted SQL
+  is byte-identical. Their changes are run-to-run timing noise, not join-lift
+  effects: regex small default 6.78x → 7.51x, 1.97x buffers; selective
+  default 107.5x/215.6x buffers small, 1281.7x/1675.6x large; pk default
+  59.7x/411.3x small, 559.1x/3105x large. Selective/pk with push-down are
+  0.75–0.80x; regex is 7.39x small, 1.33–1.36x large. These input-fence
+  gaps remain documented.
+
+**Release gate: passed.** PG18, generated Ecto SQL captured with
+`Measure.authzura_sql/2`, `join_lift: true` against `false`, interleaved,
+5 rounds × 100 calls. Ratios below are lifted / unlifted DB time, not
+Authzura / Hasura. A cell is borderline when 1.5 lies within its round-ratio
+range; no cell was borderline.
+
+| scenario | paired DB ratio | round range | buffers unlifted → lifted |
+|---|---|---|---|
+| input-rel-permission | 0.507 | 0.491–0.584 | 30220 → 7698 |
+| input-rel-permission (push-down) | 0.470 | — | — |
+| input-rel-broad-limit | 0.447 | 0.375–0.465 | — |
+| input-rel-broad-limit (push-down) | 0.387 | — | — |
+| input-col-broad-limit, input-regex, input-selective, input-pk | 0.99–1.01 | — | SQL identical |
+
+Primary-key walks of `comments_pkey` across organizations 1..40:
+`input-rel-permission` 0/40 custom and 0/40 generic, lifted and unlifted.
+The broad-limit unlifted positive control walks 40/40 custom and generic;
+lifted walks 40/40 custom, 0/40 generic, while retaining the 0.45x DB-time
+result. The generic-plan caveat does not change the open Hasura comparison.
+
+The estimate wrapper applies only to fully lifted `all_input/4` reads; any non-liftable
+hop keeps the entire permission as EXISTS (no partial lifts). The CASE
+re-checks the whole chain, never negated. `scope_input/4`, `scope/3`,
+`filter_rows/3` and `all/3` retain byte-identical SQL. Rows are identical
+lifted/unlifted, with sequences and pages equal under a total order.
+No public switch; rollback is a release revert.
+
+Task 6 hidden-row regression evidence is PG18 only, not proof for every plan;
+these tests were not run on PG16/17. CI on PG18 is the version check. The estimate wrapper spike was
+PG16 small only, distinct from this PG18 release gate.

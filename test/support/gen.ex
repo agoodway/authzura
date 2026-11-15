@@ -279,7 +279,8 @@ defmodule Authzura.Gen do
   @doc """
   The batch drawn for index `i` with seed `seed() + i`. `limits: false`
   drops every limit (and the twins); `degenerate:` is for guard
-  self-tests only.
+  self-tests only. `join_lift: true` opts into object-chain weighting for
+  the join-lift property; other properties retain the default distribution.
   """
   @spec batch(integer(), keyword()) :: batch()
   def batch(i, opts \\ []), do: Batch.build(seed() + i, opts)

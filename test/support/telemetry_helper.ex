@@ -6,6 +6,8 @@ defmodule Authzura.TelemetryHelper do
 
   import ExUnit.Callbacks, only: [on_exit: 1]
 
+  alias Authzura.Bench.Measure
+
   @doc """
   Attaches `handler_id` to `events` and detaches it in `on_exit`.
 
@@ -51,6 +53,24 @@ defmodule Authzura.TelemetryHelper do
     after
       0 -> []
     end
+  end
+
+  @doc """
+  Runs a read and returns its result with captured `{sql, params}` statements
+  for `event`. Requires `forward!/3` first. Old messages are drained; transaction
+  control and table-free input checks are excluded.
+  """
+  @spec capture_statements([atom()], (-> term())) :: {term(), [{String.t(), list()}]}
+  def capture_statements(event, read) when is_list(event) and is_function(read, 0) do
+    drain()
+    result = read.()
+
+    statements =
+      for {^event, %{query: sql, params: params}} <- drain(),
+          Measure.classify(sql) == :data,
+          do: {sql, params}
+
+    {result, statements}
   end
 
   @doc false

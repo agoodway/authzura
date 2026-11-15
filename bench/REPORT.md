@@ -22,16 +22,18 @@ Date 2026-11-15 · scale `small` · mode `default` · seed 20261114 ·
 | session-array-in | 0.46 (0.07) | 0.979 / 0.453 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | columns-narrow | 1.04 (0.10) | 1.017 / 1.057 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | input-filter | 0.96 (0.04) | 3.189 / 3.051 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
-| input-regex | 5.61 (0.20) | 1.624 / 9.108 | 1 / 1 (1) | 0 / 4 | 1 | pass | 1.97× fail | fail (buffers fail, db_time inconclusive) |
+| input-regex | 7.51 (0.05) | 0.733 / 5.508 | 1 / 1 (1) | 0 / 4 | 1 | pass | 1.97× fail | fail (buffers fail, db_time fail) |
 | limit-permission | 0.62 (0.25) | 0.130 / 0.081 | 1 / 1 (1) | 0 / 2 | 0 | pass | 0.80× pass | inconclusive (db_time inconclusive) |
 | page-1000 | 0.65 (0.09) | 1.431 / 0.928 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | preload-object | 0.79 (0.11) | 1.617 / 1.277 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.76× pass | pass |
 | preload-array-limited | 0.38 (0.10) | 0.892 / 0.337 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.79× pass | pass |
 | preload-nested-3 | 0.64 (0.17) | 4.162 / 2.643 | 1 / 4 (4) | 0 / 2 | 0 | pass | 0.86× pass | inconclusive (db_time inconclusive) |
-| input-selective | 60.71 (0.15) | 0.166 / 10.090 | 1 / 1 (1) | 0 / 2 | 0 | pass | 215.57× fail | fail (buffers fail, db_time fail) |
-| input-pk | 48.84 (0.13) | 0.144 / 7.013 | 1 / 1 (1) | 0 / 2 | 0 | fail | 411.33× fail | fail (buffers fail, db_time fail, indexes fail) |
-| input-rel-permission | 2.16 (0.20) | 10.832 / 23.407 | 1 / 1 (1) | 0 / 2 | 0 | pass | 3.93× fail | fail (buffers fail, db_time inconclusive) |
+| input-selective | 107.53 (0.59) | 0.062 / 6.708 | 1 / 1 (1) | 0 / 2 | 0 | pass | 215.57× fail | fail (buffers fail, db_time inconclusive) |
+| input-pk | 59.67 (0.32) | 0.064 / 3.835 | 1 / 1 (1) | 0 / 2 | 0 | fail | 411.33× fail | fail (buffers fail, db_time inconclusive, indexes fail) |
+| input-rel-permission | 0.98 (0.53) | 5.722 / 5.585 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
 | preload-large-batch | 1.96 (0.12) | 4.471 / 8.782 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.47× pass | fail (db_time fail) |
+| input-rel-broad-limit | 3.59 (0.12) | 0.713 / 2.563 | 1 / 1 (1) | 0 / 2 | 0 | pass | 9.64× fail | fail (buffers fail, db_time fail) |
+| input-col-broad-limit | 0.75 (0.06) | 0.351 / 0.265 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 
 Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hit + read):
 
@@ -52,8 +54,10 @@ Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hi
 | preload-nested-3 | 1: articles index `articles_pkey`, comments bitmap `comments_article_id_id_index`, articles index `articles_pkey`, users index `users_pkey`, organizations seq | 1: articles index `articles_pkey`; 2: articles index `articles_pkey`, comments index `comments_article_id_id_index`; 3: users index `users_pkey`; 4: organizations seq | 2338 / 2008 |
 | input-selective | 1: articles bitmap `articles_author_id_index` | 1: articles index `articles_pkey` | 7 / 1509 |
 | input-pk | 1: articles index `articles_pkey` | 1: articles seq | 3 / 1234 |
-| input-rel-permission | 1: articles seq, users bitmap `users_org_id_index`, organizations seq, comments index `comments_article_id_id_index` | 1: articles seq, users bitmap `users_org_id_index`, organizations seq, comments index `comments_article_id_id_index`, articles index `articles_pkey`, users index `users_pkey`, organizations seq | 7672 / 30170 |
+| input-rel-permission | 1: articles seq, users bitmap `users_org_id_index`, organizations seq, comments index `comments_article_id_id_index` | 1: organizations seq, articles seq, users bitmap `users_org_id_index`, comments index `comments_article_id_id_index` | 7672 / 7672 |
 | preload-large-batch | 1: articles bitmap `articles_org_id_index`, users index `users_pkey` | 1: articles index `articles_pkey`; 2: users index `users_pkey` | 3719 / 1742 |
+| input-rel-broad-limit | 1: comments index `comments_pkey`, articles index `articles_pkey` | 1: comments index `comments_pkey`, articles index `articles_pkey` | 940 / 9058 |
+| input-col-broad-limit | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 52 / 52 |
 
 ## small / read_only_connection
 
@@ -118,16 +122,18 @@ Date 2026-11-15 · scale `small` · mode `input_index_pushdown` · seed 20261114
 | session-array-in | 0.43 (0.13) | 0.432 / 0.186 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | columns-narrow | 0.91 (0.05) | 0.491 / 0.448 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | input-filter | 0.97 (0.04) | 1.525 / 1.476 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
-| input-regex | 8.08 (0.10) | 0.621 / 5.018 | 1 / 1 (1) | 0 / 4 | 1 | pass | 1.97× fail | fail (buffers fail, db_time fail) |
+| input-regex | 7.39 (0.12) | 0.761 / 5.624 | 1 / 1 (1) | 0 / 4 | 1 | pass | 1.96× fail | fail (buffers fail, db_time fail) |
 | limit-permission | 0.61 (0.07) | 0.057 / 0.034 | 1 / 1 (1) | 0 / 2 | 0 | pass | 0.80× pass | pass |
 | page-1000 | 0.65 (0.04) | 0.708 / 0.461 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | preload-object | 0.73 (0.24) | 0.793 / 0.581 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.76× pass | inconclusive (db_time inconclusive) |
 | preload-array-limited | 0.33 (0.06) | 0.344 / 0.112 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.79× pass | pass |
 | preload-nested-3 | 0.59 (0.13) | 2.026 / 1.193 | 1 / 4 (4) | 0 / 2 | 0 | pass | 0.86× pass | pass |
-| input-selective | 0.74 (0.41) | 0.063 / 0.047 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
-| input-pk | 0.64 (0.28) | 0.059 / 0.038 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
-| input-rel-permission | 2.03 (0.11) | 4.318 / 8.755 | 1 / 1 (1) | 0 / 2 | 0 | pass | 3.93× fail | fail (buffers fail, db_time fail) |
+| input-selective | 0.76 (0.34) | 0.049 / 0.037 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
+| input-pk | 0.78 (0.28) | 0.050 / 0.039 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
+| input-rel-permission | 1.02 (0.08) | 4.713 / 4.789 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | preload-large-batch | 2.45 (0.04) | 1.818 / 4.459 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.47× pass | fail (db_time fail) |
+| input-rel-broad-limit | 4.35 (0.20) | 0.544 / 2.365 | 1 / 1 (1) | 0 / 2 | 0 | pass | 9.64× fail | fail (buffers fail, db_time inconclusive) |
+| input-col-broad-limit | 0.82 (0.09) | 0.263 / 0.216 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 
 Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hit + read):
 
@@ -140,7 +146,7 @@ Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hi
 | session-array-in | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 49 / 49 |
 | columns-narrow | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 153 / 153 |
 | input-filter | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 498 / 497 |
-| input-regex | 1: articles bitmap `articles_org_id_index` | 1: articles index `articles_pkey` | 715 / 1405 |
+| input-regex | 1: articles bitmap `articles_org_id_index` | 1: articles index `articles_pkey` | 718 / 1405 |
 | limit-permission | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 5 / 4 |
 | page-1000 | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 92 / 92 |
 | preload-object | 1: articles index `articles_pkey`, users index `users_pkey` | 1: articles index `articles_pkey`; 2: users index `users_pkey` | 457 / 348 |
@@ -148,8 +154,10 @@ Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hi
 | preload-nested-3 | 1: articles index `articles_pkey`, comments bitmap `comments_article_id_id_index`, articles index `articles_pkey`, users index `users_pkey`, organizations seq | 1: articles index `articles_pkey`; 2: articles index `articles_pkey`, comments index `comments_article_id_id_index`; 3: users index `users_pkey`; 4: organizations seq | 2338 / 2008 |
 | input-selective | 1: articles bitmap `articles_author_id_index` | 1: articles bitmap `articles_author_id_index` | 7 / 7 |
 | input-pk | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 3 / 3 |
-| input-rel-permission | 1: articles seq, users bitmap `users_org_id_index`, organizations seq, comments index `comments_article_id_id_index` | 1: articles seq, users bitmap `users_org_id_index`, organizations seq, comments index `comments_article_id_id_index`, articles index `articles_pkey`, users index `users_pkey`, organizations seq | 7672 / 30170 |
+| input-rel-permission | 1: articles seq, users bitmap `users_org_id_index`, organizations seq, comments index `comments_article_id_id_index` | 1: organizations seq, articles seq, users bitmap `users_org_id_index`, comments index `comments_article_id_id_index` | 7672 / 7672 |
 | preload-large-batch | 1: articles bitmap `articles_org_id_index`, users index `users_pkey` | 1: articles index `articles_pkey`; 2: users index `users_pkey` | 3715 / 1742 |
+| input-rel-broad-limit | 1: comments index `comments_pkey`, articles index `articles_pkey` | 1: comments index `comments_pkey`, articles index `articles_pkey` | 940 / 9058 |
+| input-col-broad-limit | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 52 / 52 |
 
 ## large / default
 
@@ -166,16 +174,18 @@ Date 2026-11-15 · scale `large` · mode `default` · seed 20261114 ·
 | session-array-in | 0.44 (0.03) | 4.184 / 1.860 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | columns-narrow | 0.74 (0.25) | 0.598 / 0.441 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
 | input-filter | 0.85 (0.27) | 0.564 / 0.481 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
-| input-regex | 1.29 (0.19) | 1.112 / 1.431 | 1 / 1 (1) | 0 / 4 | 1 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
+| input-regex | 1.33 (0.13) | 0.755 / 1.005 | 1 / 1 (1) | 0 / 4 | 1 | pass | 1.00× pass | fail (db_time fail) |
 | limit-permission | 0.56 (0.40) | 0.086 / 0.048 | 1 / 1 (1) | 0 / 2 | 0 | pass | 0.83× pass | inconclusive (db_time inconclusive) |
 | page-1000 | 0.68 (0.08) | 1.059 / 0.719 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | preload-object | 0.88 (0.11) | 0.952 / 0.835 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.92× pass | pass |
 | preload-array-limited | 0.32 (0.26) | 0.428 / 0.137 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.80× pass | inconclusive (db_time inconclusive) |
 | preload-nested-3 | 0.66 (0.04) | 2.221 / 1.473 | 1 / 4 (4) | 0 / 2 | 0 | fail | 0.76× pass | fail (indexes fail) |
-| input-selective | 849.83 (0.50) | 0.083 / 70.266 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1675.56× fail | fail (buffers fail, db_time inconclusive) |
-| input-pk | 509.21 (0.11) | 0.040 / 20.602 | 1 / 1 (1) | 0 / 2 | 0 | fail | 3105.25× fail | fail (buffers fail, db_time fail, indexes fail) |
-| input-rel-permission | 2.48 (0.20) | 3.116 / 7.741 | 1 / 1 (1) | 0 / 2 | 0 | pass | 4.61× fail | fail (buffers fail, db_time inconclusive) |
+| input-selective | 1281.65 (0.21) | 0.047 / 59.909 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1675.56× fail | fail (buffers fail, db_time inconclusive) |
+| input-pk | 559.11 (0.34) | 0.038 / 21.012 | 1 / 1 (1) | 0 / 2 | 0 | fail | 3105.25× fail | fail (buffers fail, db_time inconclusive, indexes fail) |
+| input-rel-permission | 1.14 (0.08) | 2.153 / 2.455 | 1 / 1 (1) | 0 / 2 | 0 | fail | 1.00× pass | fail (indexes fail) |
 | preload-large-batch | 0.33 (0.22) | 2.677 / 0.870 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.33× pass | inconclusive (db_time inconclusive) |
+| input-rel-broad-limit | 6.95 (0.10) | 0.536 / 3.725 | 1 / 1 (1) | 0 / 2 | 0 | pass | 9.73× fail | fail (buffers fail, db_time fail) |
+| input-col-broad-limit | 0.82 (0.07) | 0.266 / 0.218 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 
 Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hit + read):
 
@@ -196,8 +206,10 @@ Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hi
 | preload-nested-3 | 1: articles bitmap `articles_org_id_index`, comments index `comments_article_id_id_index`, articles index `articles_pkey`, users index `users_pkey`, organizations index `organizations_pkey` | 1: articles bitmap `articles_org_id_index`; 2: articles index `articles_pkey`, comments index `comments_article_id_id_index`; 3: users index `users_pkey`; 4: organizations seq | 3817 / 2918 |
 | input-selective | 1: articles bitmap `articles_author_id_index` | 1: articles index `articles_pkey` | 9 / 15080 |
 | input-pk | 1: articles index `articles_pkey` | 1: articles seq | 4 / 12421 |
-| input-rel-permission | 1: users bitmap `users_org_id_index`, organizations index_only `organizations_pkey`, articles index `articles_author_id_index`, comments index `comments_article_id_id_index` | 1: users bitmap `users_org_id_index`, organizations index_only `organizations_pkey`, articles index `articles_author_id_index`, comments index `comments_article_id_id_index`, articles index `articles_pkey`, users index `users_pkey`, organizations index_only `organizations_pkey` | 7447 / 34358 |
+| input-rel-permission | 1: users bitmap `users_org_id_index`, organizations index_only `organizations_pkey`, articles index `articles_author_id_index`, comments index `comments_article_id_id_index` | 1: organizations seq, users bitmap `users_org_id_index`, articles index `articles_author_id_index`, comments index `comments_article_id_id_index` | 7447 / 7450 |
 | preload-large-batch | 1: articles bitmap `articles_org_id_index`, users index `users_pkey` | 1: articles bitmap `articles_org_id_index`; 2: users index `users_pkey` | 3988 / 1302 |
+| input-rel-broad-limit | 1: comments index `comments_pkey`, articles index `articles_pkey` | 1: comments index `comments_pkey`, articles index `articles_pkey` | 1368 / 13308 |
+| input-col-broad-limit | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 53 / 53 |
 
 ## large / read_only_connection
 
@@ -262,16 +274,18 @@ Date 2026-11-15 · scale `large` · mode `input_index_pushdown` · seed 20261114
 | session-array-in | 0.43 (0.05) | 3.643 / 1.579 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | columns-narrow | 0.84 (0.15) | 0.464 / 0.390 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | input-filter | 0.87 (0.22) | 0.410 / 0.356 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
-| input-regex | 1.39 (0.04) | 0.695 / 0.965 | 1 / 1 (1) | 0 / 4 | 1 | pass | 1.00× pass | fail (db_time fail) |
+| input-regex | 1.36 (0.24) | 0.961 / 1.309 | 1 / 1 (1) | 0 / 4 | 1 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
 | limit-permission | 0.57 (0.24) | 0.058 / 0.033 | 1 / 1 (1) | 0 / 2 | 0 | pass | 0.83× pass | inconclusive (db_time inconclusive) |
 | page-1000 | 0.64 (0.13) | 0.757 / 0.487 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 | preload-object | 0.81 (0.18) | 0.633 / 0.513 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.92× pass | inconclusive (db_time inconclusive) |
 | preload-array-limited | 0.42 (0.22) | 0.291 / 0.121 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.80× pass | inconclusive (db_time inconclusive) |
 | preload-nested-3 | 0.69 (0.23) | 1.696 / 1.167 | 1 / 4 (4) | 0 / 2 | 0 | fail | 0.76× pass | fail (db_time inconclusive, indexes fail) |
-| input-selective | 0.65 (0.09) | 0.042 / 0.027 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
-| input-pk | 0.61 (0.36) | 0.048 / 0.029 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
-| input-rel-permission | 3.38 (0.22) | 2.224 / 7.526 | 1 / 1 (1) | 0 / 2 | 0 | pass | 4.61× fail | fail (buffers fail, db_time inconclusive) |
+| input-selective | 0.80 (0.41) | 0.049 / 0.039 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | inconclusive (db_time inconclusive) |
+| input-pk | 0.75 (0.14) | 0.054 / 0.040 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
+| input-rel-permission | 0.97 (0.21) | 3.559 / 3.438 | 1 / 1 (1) | 0 / 2 | 0 | fail | 1.00× pass | fail (db_time inconclusive, indexes fail) |
 | preload-large-batch | 0.32 (0.19) | 2.116 / 0.686 | 1 / 2 (2) | 0 / 2 | 0 | pass | 0.33× pass | inconclusive (db_time inconclusive) |
+| input-rel-broad-limit | 6.44 (0.21) | 0.657 / 4.231 | 1 / 1 (1) | 0 / 2 | 0 | pass | 9.73× fail | fail (buffers fail, db_time inconclusive) |
+| input-col-broad-limit | 0.80 (0.13) | 0.262 / 0.210 | 1 / 1 (1) | 0 / 2 | 0 | pass | 1.00× pass | pass |
 
 Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hit + read):
 
@@ -292,8 +306,10 @@ Plan shape (`EXPLAIN (ANALYZE, BUFFERS)`, scans in plan order; shared buffers hi
 | preload-nested-3 | 1: articles bitmap `articles_org_id_index`, comments index `comments_article_id_id_index`, articles index `articles_pkey`, users index `users_pkey`, organizations index `organizations_pkey` | 1: articles bitmap `articles_org_id_index`; 2: articles index `articles_pkey`, comments index `comments_article_id_id_index`; 3: users index `users_pkey`; 4: organizations seq | 3817 / 2918 |
 | input-selective | 1: articles bitmap `articles_author_id_index` | 1: articles bitmap `articles_author_id_index` | 9 / 9 |
 | input-pk | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 4 / 4 |
-| input-rel-permission | 1: users bitmap `users_org_id_index`, organizations index_only `organizations_pkey`, articles index `articles_author_id_index`, comments index `comments_article_id_id_index` | 1: users bitmap `users_org_id_index`, organizations index_only `organizations_pkey`, articles index `articles_author_id_index`, comments index `comments_article_id_id_index`, articles index `articles_pkey`, users index `users_pkey`, organizations index_only `organizations_pkey` | 7447 / 34358 |
+| input-rel-permission | 1: users bitmap `users_org_id_index`, organizations index_only `organizations_pkey`, articles index `articles_author_id_index`, comments index `comments_article_id_id_index` | 1: organizations seq, users bitmap `users_org_id_index`, articles index `articles_author_id_index`, comments index `comments_article_id_id_index` | 7447 / 7450 |
 | preload-large-batch | 1: articles bitmap `articles_org_id_index`, users index `users_pkey` | 1: articles bitmap `articles_org_id_index`; 2: users index `users_pkey` | 3988 / 1302 |
+| input-rel-broad-limit | 1: comments index `comments_pkey`, articles index `articles_pkey` | 1: comments index `comments_pkey`, articles index `articles_pkey` | 1368 / 13308 |
+| input-col-broad-limit | 1: articles index `articles_pkey` | 1: articles index `articles_pkey` | 53 / 53 |
 
 ## Fairness
 
@@ -335,13 +351,14 @@ Every failing, inconclusive or aborted target, triaged in `bench/TRIAGE.md`.
 their `REPEATABLE READ, READ ONLY` transaction by design.
 
 - `flat-tenant` (small, default): db_time inconclusive
-- `input-regex` (small, default): buffers fail, db_time inconclusive
+- `input-regex` (small, default): buffers fail, db_time fail
 - `limit-permission` (small, default): db_time inconclusive
 - `preload-nested-3` (small, default): db_time inconclusive
-- `input-selective` (small, default): buffers fail, db_time fail
-- `input-pk` (small, default): buffers fail, db_time fail, indexes fail
-- `input-rel-permission` (small, default): buffers fail, db_time inconclusive
+- `input-selective` (small, default): buffers fail, db_time inconclusive
+- `input-pk` (small, default): buffers fail, db_time inconclusive, indexes fail
+- `input-rel-permission` (small, default): db_time inconclusive
 - `preload-large-batch` (small, default): db_time fail
+- `input-rel-broad-limit` (small, default): buffers fail, db_time fail
 - `author-or-published` (small, read_only_connection): db_time inconclusive
 - `exists-member` (small, read_only_connection): db_time inconclusive
 - `rel-filter-3hop` (small, read_only_connection): db_time inconclusive
@@ -362,19 +379,20 @@ their `REPEATABLE READ, READ ONLY` transaction by design.
 - `preload-object` (small, input_index_pushdown): db_time inconclusive
 - `input-selective` (small, input_index_pushdown): db_time inconclusive
 - `input-pk` (small, input_index_pushdown): db_time inconclusive
-- `input-rel-permission` (small, input_index_pushdown): buffers fail, db_time fail
 - `preload-large-batch` (small, input_index_pushdown): db_time fail
+- `input-rel-broad-limit` (small, input_index_pushdown): buffers fail, db_time inconclusive
 - `flat-tenant` (large, default): db_time inconclusive
 - `columns-narrow` (large, default): db_time inconclusive
 - `input-filter` (large, default): db_time inconclusive
-- `input-regex` (large, default): db_time inconclusive
+- `input-regex` (large, default): db_time fail
 - `limit-permission` (large, default): db_time inconclusive
 - `preload-array-limited` (large, default): db_time inconclusive
 - `preload-nested-3` (large, default): indexes fail
 - `input-selective` (large, default): buffers fail, db_time inconclusive
-- `input-pk` (large, default): buffers fail, db_time fail, indexes fail
-- `input-rel-permission` (large, default): buffers fail, db_time inconclusive
+- `input-pk` (large, default): buffers fail, db_time inconclusive, indexes fail
+- `input-rel-permission` (large, default): indexes fail
 - `preload-large-batch` (large, default): db_time inconclusive
+- `input-rel-broad-limit` (large, default): buffers fail, db_time fail
 - `flat-tenant` (large, read_only_connection): db_time inconclusive
 - `exists-member` (large, read_only_connection): db_time inconclusive
 - `columns-narrow` (large, read_only_connection): db_time inconclusive
@@ -389,11 +407,12 @@ their `REPEATABLE READ, READ ONLY` transaction by design.
 - `input-pk` (large, read_only_connection): buffers fail, db_time fail, indexes fail
 - `input-rel-permission` (large, read_only_connection): buffers fail, db_time inconclusive
 - `input-filter` (large, input_index_pushdown): db_time inconclusive
-- `input-regex` (large, input_index_pushdown): db_time fail
+- `input-regex` (large, input_index_pushdown): db_time inconclusive
 - `limit-permission` (large, input_index_pushdown): db_time inconclusive
 - `preload-object` (large, input_index_pushdown): db_time inconclusive
 - `preload-array-limited` (large, input_index_pushdown): db_time inconclusive
 - `preload-nested-3` (large, input_index_pushdown): db_time inconclusive, indexes fail
-- `input-pk` (large, input_index_pushdown): db_time inconclusive
-- `input-rel-permission` (large, input_index_pushdown): buffers fail, db_time inconclusive
+- `input-selective` (large, input_index_pushdown): db_time inconclusive
+- `input-rel-permission` (large, input_index_pushdown): db_time inconclusive, indexes fail
 - `preload-large-batch` (large, input_index_pushdown): db_time inconclusive
+- `input-rel-broad-limit` (large, input_index_pushdown): buffers fail, db_time inconclusive

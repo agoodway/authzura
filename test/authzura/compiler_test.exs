@@ -7,7 +7,6 @@ defmodule Authzura.CompilerTest do
   alias Authzura.Compiler.Aliases
   alias Authzura.Model.{Column, Table}
   alias Ecto.Adapters.SQL
-  alias Ecto.{Query, SubQuery}
 
   doctest Aliases
   doctest Compiler, only: [public_reason: 1]
@@ -33,13 +32,6 @@ defmodule Authzura.CompilerTest do
 
   defp pk(@order), do: "Id"
   defp pk(_ref), do: "id"
-
-  # Every subquery reachable from the query's where clauses, depth first.
-  defp subqueries(%Query{wheres: wheres}) do
-    Enum.flat_map(wheres, fn %{subqueries: subs} ->
-      Enum.flat_map(subs, fn %SubQuery{query: query} -> [query | subqueries(query)] end)
-    end)
-  end
 
   describe "comparisons" do
     test "a non-null column compiles to plain =", %{tables: t, session: s} do
@@ -106,7 +98,7 @@ defmodule Authzura.CompilerTest do
              ]
 
       sql = sql(query)
-      assert [_, _, _] = Regex.scan(~r/exists\(/, sql)
+      assert 3 = occurrences(sql, "exists(")
       assert sql =~ ~s|"public"."organizations"|
     end
 

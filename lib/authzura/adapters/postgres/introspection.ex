@@ -25,7 +25,9 @@ defmodule Authzura.Adapters.Postgres.Introspection do
   and the table its kind (`relkind`: table, or view/materialized view).
   `Authzura.Adapters.Postgres.index_pushdown?/2` reads them for
   `input_index_pushdown`, so the fingerprint covers all three and a change
-  reloads the snapshot.
+  reloads the snapshot. It also covers `relhassubclass` and the primary-key
+  constraint and index inputs to `Table.strict_key?`, including
+  `condeferrable` and `indisvalid`.
 
   A type that classified `:other` (an extension type such as PostGIS
   `geography`, or `cube`) is `:decodable` when the data repo's own Postgrex
@@ -131,10 +133,17 @@ defmodule Authzura.Adapters.Postgres.Introspection do
   ORDER BY ns.nspname, c.relname, a.attnum
   """
 
+  # The last column marks a key that is strictly unique: not deferrable,
+  # with a valid index, and no inheritance children. A partitioned table's
+  # key is enforced across its partitions, so `relkind = 'p'` is allowed, but
+  # only while the key index is valid (`ALTER TABLE ONLY ... ADD PRIMARY KEY`
+  # on a partitioned table leaves it invalid, and duplicates get in).
   @primary_keys_sql """
-  SELECT ns.nspname, c.relname, #{ordered_names.("conkey", "conrelid")}
+  SELECT ns.nspname, c.relname, #{ordered_names.("conkey", "conrelid")},
+         NOT k.condeferrable AND pi.indisvalid AND (NOT c.relhassubclass OR c.relkind = 'p')
   #{@tables_from}
   JOIN pg_constraint k ON k.conrelid = c.oid AND k.contype = 'p'
+  JOIN pg_index pi ON pi.indexrelid = k.conindid
   """
 
   # An index's key columns (never `INCLUDE` columns), with their
@@ -183,7 +192,7 @@ defmodule Authzura.Adapters.Postgres.Introspection do
   FROM (
     SELECT concat_ws(':', 'column', ns.nspname, c.relname, a.attname,
                      format_type(a.atttypid, a.atttypmod), a.attnotnull, a.attgenerated,
-                     c.relkind, #{@eq_leakproof},
+                     c.relkind, c.relhassubclass, #{@eq_leakproof},
                      (SELECT tn.nspname FROM pg_type ty
                       JOIN pg_namespace tn ON tn.oid = ty.typnamespace
                       WHERE ty.oid = a.atttypid),
@@ -434,8 +443,8 @@ defmodule Authzura.Adapters.Postgres.Introspection do
   end
 
   defp put_primary_keys(tables, pks) do
-    Enum.reduce(pks, tables, fn [schema, name, columns], acc ->
-      Map.update!(acc, {schema, name}, &%{&1 | primary_key: columns})
+    Enum.reduce(pks, tables, fn [schema, name, columns, strict?], acc ->
+      Map.update!(acc, {schema, name}, &%{&1 | primary_key: columns, strict_key?: strict?})
     end)
   end
 

@@ -4,9 +4,12 @@ Every known difference between Authzura and Hasura v2 (tested against
 v2.51.6), and every known performance gap, with cause, evidence and possible
 follow-ups. Sources: `docs/hasura-test-coverage.md` (Divergences, Out of
 scope), `docs/guides/security.md`, `test/parity/reviewed_divergences.exs`,
-`bench/TRIAGE.md`, `bench/REPORT.md`, `lib/authzura/error.ex`, `CHANGELOG.md`.
+[benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md), `bench/REPORT.md`, `lib/authzura/error.ex`, `CHANGELOG.md`.
 Numbers come from the bench rerun of 2026-11-15 (`--requests 1000`, seed
-20261114, Postgres 18.6) unless stated.
+20261114, Postgres 18.6) unless stated. Section 2.1 records join-lift; the
+other performance tables below retain the earlier baseline measurements.
+Non-relationship input SQL is unchanged; current ratios are in
+[benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md).
 
 "Fails closed" means the difference can only deny or error, never return a
 row Hasura would not.
@@ -64,44 +67,75 @@ most 15 %. "Less DB time" is not "faster": Ecto decoding, preload stitching
 and round trips are outside the figures, while Hasura's in-SQL JSON building
 is inside them.
 
-### 2.1 Relationship permissions with input: about 2-3.4x in every mode
+### 2.1 Relationship permissions with input: join-lift and remaining gaps
 
 Scenario `input-rel-permission`: an input `_like` under the three-hop
-relationship permission. Fails or is inconclusive on CV in every mode,
-push-down on or off.
+relationship permission. Before join-lift, the outer `EXISTS` became a
+semi-join, but its copy inside `CASE` ran as a correlated SubPlan per
+candidate row. Join-lift removes that second EXISTS evaluation.
 
-| Scale | default | read_only_connection | input_index_pushdown | Buffers (A / H) |
+| Scale | Mode | DB ratio before → after | Buffers (A / H) before → after | After verdict |
 |---|---|---|---|---|
-| small | 2.16 (CV 0.20) | 2.01 (0.22) | 2.03 (0.11) | 3.93x |
-| large | 2.48 (0.20) | 3.08 (0.25) | 3.38 (0.22) | 4.61x |
+| small | default | 2.21 → 0.98 | 3.93x → 1.00x | inconclusive (CV 0.53) |
+| small | input_index_pushdown | 1.68 → 1.02 | 3.93x → 1.00x | pass |
+| large | default | 2.98 → 1.14 | 4.61x → 1.00x | fail (indexes) |
+| large | input_index_pushdown | 3.02 → 0.97 | 4.61x → 1.00x | fail (indexes) |
 
-DB ms (Hasura / Authzura): small default 10.832 / 23.407; large default
-3.116 / 7.741.
+Before: 200 requests; after: 1000, medians, Postgres 18.6, Hasura v2.51.6,
+seed 20261114. The `input-rel-permission` buffer gap is closed at both
+scales, and its DB-time target passes where conclusive. Small default DB
+time is inconclusive; at large the index target still fails:
+Authzura still seq-scans `organizations` where Hasura uses `organizations_pkey`.
 
-**Cause.** The input is compiled as
-`permission AND (CASE WHEN permission THEN input ELSE false END)`. When the
-permission goes through a relationship it is an `EXISTS`. As the outer
-conjunct Postgres turns it into a semi-join; inside the `CASE` an `EXISTS`
-cannot be a join, so it becomes a correlated SubPlan, evaluated again once
-per candidate row. The permission is therefore computed twice.
+**Join-lift and estimate wrapper.** Only `all_input/4` (`:execute` mode) lifts a fully
+liftable permission into inner joins, all-or-nothing. Each object hop must
+map onto the whole introspected unique, non-deferrable, valid primary key,
+with no inheritance target (partitioned tables may qualify). Mapping pairs
+must be lossless: integer-family pairs or same-type collation-free pairs
+such as UUID; domains resolve to their base type. The optional
+`c:Authzura.Adapter.lossless_join_pair?/2` callback certifies pairs (absent:
+no join-lift), and `Authzura.Model.Table.strict_key?` records key strictness.
+At most seven joins and the alias budget may be used.
 
-**Evidence** (performance audit M2; role `deep`, three-hop filter, `body
-_like "%7"`, `ORDER BY id LIMIT 100`, `small`, Authzura only): 30,173 buffers
-against 7,675 for the same read without the input filter. The SubPlan ran
-3,214 times and accounts for 22,498 of the buffers (3.9x in total).
+The positive permission conjunct and `CASE` fence remain. The `WHEN`
+re-checks every mapping equality and target condition in the whole chain,
+never negated. Fully lifted reads use the 10% estimate wrapper
+`(CASE WHEN ? THEN ? ELSE false END)::int = ANY('{1 x20}'::int[])`
+(array shorthand: twenty ones) to avoid primary-key walks for
+`input-rel-permission`. Lifted and unlifted reads return identical row sets;
+sequences and pages match under a total order.
 
-**Push-down does not help.** It only adds hoisted conjuncts beside the fence;
-the fence keeps the whole input including the second permission copy.
-Relationships are `EXISTS`, never pushed down, by design.
+**Still SubPlan/EXISTS.** Any non-liftable hop keeps the entire permission
+unlifted: no partial lifts. This includes `_or`/`_not`, `_exists`, array
+relationships/arrays, non-strict keys, lossy pairs and text-family or
+nondeterministic-collation pairs. `scope_input/4`, `scope/3`, `filter_rows/3`
+and `all/3` are not lifted and retain byte-identical SQL. There is no public
+switch; rollback is a release revert.
 
-**Candidate fixes to evaluate later.** Each must keep the no-error-oracle
-guarantee: no input predicate may run on a row the permission rejects.
+**Broad-limit remains open.** `input-rel-broad-limit` improves from
+9.88/9.72x to 3.59/4.35x at small (default/push-down), and from 8.63/6.73x
+to 6.95/6.44x at large. Buffers **rise** from 1.67x to 9.64x at small
+(lifted 9072 vs unlifted 1585 buffers in the paired comparison): a regression
+and the cost of lifting broad reads, still a remaining gap. Large buffers
+fall from 10.02x to 9.73x. It still fails the 1.25x DB-time and 1.5x buffer
+targets: about 9000 buffers against Hasura's 940 at small. Hasura walks
+`comments_pkey`, exits early and evaluates the permission lazily.
 
-| Candidate | Idea | Risk |
-|---|---|---|
-| Evaluate the permission once | Restructure the fence: a semijoin or a materialized permitted-row subquery, with the input applied to its output | The `CASE` is what fixes the order Postgres documents. A subquery relies on planner behaviour unless it is a real optimizer barrier. A materialized permitted set can read all rows a permission admits before the `LIMIT` |
-| `OFFSET 0` / subquery fencing | Move the permission into an `OFFSET 0` subquery | Rejected earlier as "not provably equivalent" (TRIAGE, `input-regex`): it either replaces the `CASE`'s documented ordering with a planner implementation detail, or, with the `CASE` kept on top, makes Postgres plan the subquery for full retrieval, so a permission admitting many rows (`author`, a third of the table) reads all of them before the `LIMIT` where the current plan stops after 100. It gave the bitmap plan (715 buffers) for the regex scenario but is not safe in general |
-| Fence only input conjuncts that can error | Leave leaf comparisons that cannot raise (leakproof, typed parameters) outside the `CASE`, keep the fence for patterns and the rest | That is the push-down trade-off applied to more shapes: a wider timing channel. A `_like` (the measured case) can still run long on hidden rows, so it would still need the fence, and the duplicate would remain for pattern inputs. The audit found no rewrite that evaluates the permission once and keeps the `CASE` ordering |
+**Release gate.** Generated Ecto SQL on PG18 passed the paired lifted/unlifted
+gate (5 rounds × 100 calls): `input-rel-permission` 0.507x
+(range 0.491–0.584), buffers 30220 → 7698; broad-limit 0.447x
+(0.375–0.465), push-down 0.387x. No borderline cell. Across organizations
+1..40, rel-permission walks `comments_pkey` 0/40 under custom and generic
+plans, lifted or unlifted. Broad-limit's unlifted control walks 40/40 in
+both regimes; lifted walks 40/40 custom, 0/40 generic. The buffer pin now
+passes at 1.00x. Column-broad, regex, selective and pk SQL is identical
+lifted/unlifted (paired ratios 0.99–1.01); their timing changes are run noise.
+Hidden-row evidence is PG18 only, with CI on PG18 as the version check;
+these tests were not run on PG16/17. This is regression evidence, not proof
+for every plan. The 10% estimate wrapper spike was PG16 small only.
+Deferred work includes the broad-limit gap, text-pair lifting, array
+relationships unique through an index, and PG17/PG18/large-scale spike
+measurements. Full measurements: [benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md).
 
 ### 2.2 Fenced selective and primary-key inputs without push-down
 
@@ -138,7 +172,8 @@ bitmap scan on `articles_org_id_index`, which sees the bare predicate (114
 rows estimated). Regex is always fenced, so push-down does not change it. At
 large both engines choose the bitmap scan and no target fails except
 `input_index_pushdown` DB time (1.39, CV 0.04). Status: documented gap, the
-fence stays (owner ruling). Fix candidates: those of 2.1.
+fence stays (owner ruling). Join-lift does not apply: this permission has
+no relationship, and its captured SQL is unchanged.
 
 ### 2.4 `preload-large-batch` at small
 
@@ -236,10 +271,12 @@ Possible follow-up: single-statement preloads (later stage).
 
 In priority order.
 
-1. **Relationship-permission fence fix** (2.1): the largest remaining gap
-   (2-3.4x, every mode), affects every role whose permission goes through a
-   relationship. Needs a design that evaluates the permission once and keeps
-   the no-error-oracle proof.
+1. **Relationship broad-limit and fallback permissions** (2.1): join-lift
+   closes the `input-rel-permission` buffer gap; DB time passes where
+   conclusive (small default inconclusive, large index target still failing).
+   Broad-limit still costs
+   3.59-6.95x DB time and 9.64-9.73x buffers; non-liftable permissions keep
+   their EXISTS SubPlans. Any follow-up must preserve the CASE guarantee.
 2. **PostGIS** (rows 15-16): output and `_st_*` operators; a spec and plan
    exist. Today it is deny or omit.
 3. **PgRest `authorize_query/5` example adapter**, when PgRest ships it

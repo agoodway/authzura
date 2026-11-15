@@ -8,6 +8,7 @@ defmodule Authzura.HasuraScenarios.RelationshipsTest do
 
   import Authzura.HasuraScenarios
 
+  alias Authzura.HasuraFixture
   alias Authzura.Test.HasuraSchemas.BoolexpAuthor
 
   # lib/api-tests/src/Test/Regression/MultiColumnObjectRelationshipsSpec.hs
@@ -24,15 +25,11 @@ defmodule Authzura.HasuraScenarios.RelationshipsTest do
             %{
               table: @quote,
               object_relationships: [
-                %{
-                  name: "by",
-                  using: %{
-                    manual_configuration: %{
-                      remote_table: {"hasura_multi_column", "character"},
-                      column_mapping: mapping
-                    }
-                  }
-                }
+                HasuraFixture.object_relationship(
+                  "by",
+                  {"hasura_multi_column", "character"},
+                  mapping
+                )
               ]
             }
           ])
@@ -70,15 +67,9 @@ defmodule Authzura.HasuraScenarios.RelationshipsTest do
             %{
               table: @limited_article,
               object_relationships: [
-                %{
-                  name: "author",
-                  using: %{
-                    manual_configuration: %{
-                      remote_table: {"hasura_object_limit", "author"},
-                      column_mapping: %{author_name: "name"}
-                    }
-                  }
-                }
+                HasuraFixture.object_relationship("author", {"hasura_object_limit", "author"}, %{
+                  author_name: "name"
+                })
               ]
             }
           ])

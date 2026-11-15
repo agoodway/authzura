@@ -14,13 +14,13 @@ defmodule Authzura.Gen.Batch do
   alias Authzura.Gen
   alias Authzura.Gen.{Catalog, Filter, Mutation}
 
-  @doc "The batch drawn with `seed`; `limits:` and `degenerate:` as in `Authzura.Gen.batch/2`."
+  @doc "The batch drawn with `seed`; `limits:`, `degenerate:` and `join_lift:` as in `Authzura.Gen.batch/2`."
   @spec build(integer(), keyword()) :: Gen.batch()
   def build(seed, opts) do
     degenerate = Keyword.get(opts, :degenerate)
 
     seed
-    |> draw(degenerate)
+    |> draw(degenerate, Keyword.take(opts, [:join_lift]))
     |> complete(degenerate)
     |> with_limits(Keyword.get(opts, :limits, true))
   end
@@ -93,10 +93,10 @@ defmodule Authzura.Gen.Batch do
     end
   end
 
-  defp draw(seed, degenerate) do
+  defp draw(seed, degenerate, filter_opts) do
     permissions =
       Gen.roles()
-      |> Enum.map(fn _role -> role_permissions(degenerate) end)
+      |> Enum.map(fn _role -> role_permissions(degenerate, filter_opts) end)
       |> fixed_list()
       |> resize(30)
       |> seeded(seed)
@@ -119,19 +119,22 @@ defmodule Authzura.Gen.Batch do
 
   # Permissions.
 
-  defp role_permissions(degenerate) do
+  defp role_permissions(degenerate, filter_opts) do
     Catalog.tracked()
     |> Enum.map(fn table ->
-      frequency([{1, constant(nil)}, {9, map(table_permission(table, degenerate), &{table, &1})}])
+      frequency([
+        {1, constant(nil)},
+        {9, map(table_permission(table, degenerate, filter_opts), &{table, &1})}
+      ])
     end)
     |> fixed_list()
     |> map(fn entries -> entries |> Enum.reject(&is_nil/1) |> Map.new() end)
   end
 
-  defp table_permission(table, degenerate) do
+  defp table_permission(table, degenerate, filter_opts) do
     fixed_map(%{
       "columns" => permission_columns(table, degenerate),
-      "filter" => permission_filter(table, degenerate),
+      "filter" => permission_filter(table, degenerate, filter_opts),
       "limit" => frequency([{7, constant(nil)}, {3, limit()}]),
       "query_root_fields" => root_fields(Catalog.pk(table))
     })
@@ -157,8 +160,10 @@ defmodule Authzura.Gen.Batch do
   defp permission_columns(table, _degenerate),
     do: frequency([{3, constant("*")}, {7, subset(Catalog.names(table), 7)}])
 
-  defp permission_filter(_table, :no_filters), do: constant(%{})
-  defp permission_filter(table, _degenerate), do: Filter.permission(table)
+  defp permission_filter(_table, :no_filters, _filter_opts), do: constant(%{})
+
+  defp permission_filter(table, _degenerate, filter_opts),
+    do: Filter.permission(table, filter_opts)
 
   defp root_fields([]), do: frequency([{9, constant(nil)}, {1, constant([])}])
 

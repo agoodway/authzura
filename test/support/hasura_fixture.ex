@@ -58,6 +58,29 @@ defmodule Authzura.HasuraFixture do
   def select_permissions(role, columns, filter \\ %{}),
     do: [%{role: role, permission: %{columns: columns, filter: filter}}]
 
+  @doc "A manual object relationship entry."
+  @spec object_relationship(String.t(), {String.t(), String.t()}, map()) :: map()
+  def object_relationship(name, remote_table, column_mapping),
+    do: manual_relationship(name, remote_table, column_mapping)
+
+  @doc "A manual array relationship entry."
+  @spec array_relationship(String.t(), {String.t(), String.t()}, map()) :: map()
+  def array_relationship(name, remote_table, column_mapping),
+    do: manual_relationship(name, remote_table, column_mapping)
+
+  @doc "A relationship inferred from a local or remote foreign key."
+  @spec fk_relationship(String.t(), String.t() | [String.t()] | map()) :: map()
+  def fk_relationship(name, constraint),
+    do: %{name: name, using: %{foreign_key_constraint_on: constraint}}
+
+  defp manual_relationship(name, remote_table, column_mapping),
+    do: %{
+      name: name,
+      using: %{
+        manual_configuration: %{remote_table: remote_table, column_mapping: column_mapping}
+      }
+    }
+
   @doc """
   Replaces the single `hdb_catalog.hdb_metadata` row with `metadata` at
   `resource_version`. Test fixture only: the library never writes the catalog.

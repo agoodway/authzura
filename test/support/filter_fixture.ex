@@ -25,6 +25,15 @@ defmodule Authzura.FilterFixture do
     tables
   end
 
+  @doc "Runs scratch DDL and introspects the named public tables on repo."
+  @spec scratch!(module(), [String.t()], [String.t()]) :: map()
+  def scratch!(repo, ddl, names) do
+    Enum.each(ddl, &repo.query!/1)
+    refs = Enum.map(names, &{"public", &1})
+    {:ok, tables, _fks} = Postgres.introspect(repo, refs)
+    tables
+  end
+
   @doc "Parses a permission filter against `ref`."
   @spec parse(map(), {String.t(), String.t()}, map()) ::
           {:ok, AST.t()} | {:error, [{BoolExp.path(), BoolExp.reason()}]}
@@ -88,59 +97,42 @@ defmodule Authzura.FilterFixture do
       %{
         table: @articles,
         object_relationships: [
-          %{name: "author", using: %{foreign_key_constraint_on: "author_id"}},
-          %{name: "editor", using: %{foreign_key_constraint_on: "editor_id"}}
+          HasuraFixture.fk_relationship("author", "author_id"),
+          HasuraFixture.fk_relationship("editor", "editor_id")
         ],
         array_relationships: [
-          %{
-            name: "comments",
-            using: %{foreign_key_constraint_on: %{table: @comments, column: "article_id"}}
-          },
-          %{
-            name: "events",
-            using: %{
-              manual_configuration: %{
-                remote_table: {"audit", "article_events"},
-                column_mapping: %{id: "article_id"}
-              }
-            }
-          }
+          HasuraFixture.fk_relationship("comments", %{table: @comments, column: "article_id"}),
+          HasuraFixture.array_relationship("events", {"audit", "article_events"}, %{
+            id: "article_id"
+          })
         ]
       },
       %{
         table: @users,
         object_relationships: [
-          %{name: "org", using: %{foreign_key_constraint_on: "org_id"}},
-          %{name: "manager", using: %{foreign_key_constraint_on: "manager_id"}}
+          HasuraFixture.fk_relationship("org", "org_id"),
+          HasuraFixture.fk_relationship("manager", "manager_id")
         ],
         array_relationships: [
-          %{
-            name: "articles",
-            using: %{foreign_key_constraint_on: %{table: @articles, column: "author_id"}}
-          }
+          HasuraFixture.fk_relationship("articles", %{table: @articles, column: "author_id"})
         ]
       },
       %{
         table: @comments,
         object_relationships: [
-          %{name: "article", using: %{foreign_key_constraint_on: "article_id"}}
+          HasuraFixture.fk_relationship("article", "article_id")
         ]
       },
       %{
         table: {"public", "membership_notes"},
         object_relationships: [
-          %{name: "membership", using: %{foreign_key_constraint_on: ["org_id", "user_id"]}}
+          HasuraFixture.fk_relationship("membership", ["org_id", "user_id"])
         ]
       },
       %{
         table: {"public", "published_articles"},
         object_relationships: [
-          %{
-            name: "author",
-            using: %{
-              manual_configuration: %{remote_table: @users, column_mapping: %{author_id: "id"}}
-            }
-          }
+          HasuraFixture.object_relationship("author", @users, %{author_id: "id"})
         ]
       }
     ]

@@ -32,6 +32,16 @@ defmodule Authzura.Test.Vacuity do
   @restricted 0.25
   @nested 0.25
   @stricter 0.10
+  @lifted 0.20
+  @fallback 0.10
+
+  @type lift_observation :: %{
+          rel_permission?: boolean(),
+          lifted: non_neg_integer(),
+          incomplete?: boolean(),
+          fallback?: boolean(),
+          nullable_chain?: boolean()
+        }
 
   @type observation :: %{
           denial: Gen.denial() | nil,
@@ -108,6 +118,51 @@ defmodule Authzura.Test.Vacuity do
     "fence checks whose input filter removes a permitted row"
     |> share(Enum.count(checks, &(&1 == :stricter)), length(checks), @stricter)
     |> List.wrap()
+  end
+
+  @doc """
+  Join-lift guards over a batch's executed reads with relationship permissions:
+  at least 20 % lift a join, at least 10 % fall back or expose an invalid
+  incomplete lift, and at least one exercises a nullable chain. An empty denominator fails all three.
+  `lifted` counts executed INNER JOINs, not merely candidate relationships.
+  """
+  @spec lift_failures([lift_observation()]) :: [String.t()]
+  def lift_failures(observations) do
+    relationships = Enum.filter(observations, & &1.rel_permission?)
+    stats = lift_stats(relationships)
+    total = stats.relationship_permission_cases
+
+    [
+      share(
+        "lifted relationship reads",
+        stats.lifted_reads,
+        total,
+        @lifted
+      ),
+      share(
+        "incomplete or fallback relationship reads",
+        stats.incomplete_or_fallback,
+        total,
+        @fallback
+      ),
+      if(stats.nullable_chain == 0, do: "nullable chain: no cases")
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  @doc "Executed join-lift coverage counts for a stream of observations."
+  @spec lift_stats([lift_observation()]) :: %{atom() => non_neg_integer()}
+  def lift_stats(observations) do
+    %{
+      cases: length(observations),
+      relationship_permission_cases: Enum.count(observations, & &1.rel_permission?),
+      lifted_reads: Enum.count(observations, &(&1.lifted > 0)),
+      lifted_joins: Enum.sum_by(observations, & &1.lifted),
+      incomplete_or_fallback: Enum.count(observations, &(&1.incomplete? or &1.fallback?)),
+      incomplete: Enum.count(observations, & &1.incomplete?),
+      fallback: Enum.count(observations, & &1.fallback?),
+      nullable_chain: Enum.count(observations, & &1.nullable_chain?)
+    }
   end
 
   @doc """

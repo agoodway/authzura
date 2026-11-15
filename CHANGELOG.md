@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional `c:Authzura.Adapter.lossless_join_pair?/2` callback (absent: no
+  join-lift) and `Authzura.Model.Table.strict_key?` for strictly unique keys.
+- Bench scenarios `input-rel-broad-limit` and `input-col-broad-limit`, role
+  `broad`, and `--db-only` seeding without contacting Hasura.
 - Opt-in instance option `input_index_pushdown` (default `false`): an AND-ed
   `_eq`, or an `_in` of up to 100 values, on a plain table column whose
   `pg_catalog` equality Postgres marks leakproof (integers, floats, text,
@@ -40,6 +44,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- perf: Fully liftable relationship permissions on `all_input/4` reads compile
+  as joins inside the CASE fence; small `input-rel-permission` buffers fall
+  from 3.9x to 1.0x Hasura and DB time from 2.2x to ~1.0x (CV 0.53,
+  inconclusive). At large, DB time falls from 2.98x to 1.14x and buffers
+  from 4.61x to 1.00x; the large index target still fails.
+  `input-rel-broad-limit` has a buffer regression and remains a gap: small
+  buffers rise from 1.67x to 9.64x (lifted 9072 vs unlifted 1585 buffers),
+  while DB time falls from 9.88x to 3.59x. The release gate and hidden-row
+  regression evidence are PG18 only; hidden-row tests are evidence, not proof.
+  The 10% estimate wrapper was chosen by a PG16-small-only spike.
+  Deferred: the broad-limit gap, text-pair lifting, array relationships unique
+  through an index, and PG17/PG18/large-scale spike measurements.
+  No public switch; rollback is a release revert.
 - Extension-type columns that the data repo's Postgrex types module decodes (a
   PostGIS `geography`, say) are now in the default projection, like Hasura's.
   Introspection asks the repo's Postgrex types module (no query) whether it has
@@ -129,4 +146,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Verified against Hasura v2.51.6: the parity suite, the randomized
   differential suite (default and deep runs) and a full benchmark rerun (both
   scales, both modes, 17 scenarios); see `bench/REPORT.md` and
-  `bench/TRIAGE.md`.
+  [benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md).

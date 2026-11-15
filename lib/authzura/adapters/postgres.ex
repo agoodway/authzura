@@ -132,6 +132,44 @@ defmodule Authzura.Adapters.Postgres do
   @key_kinds [:integer, :bigint, :text, :citext, :uuid, :enum]
   @transaction_read_only "SELECT current_setting('transaction_read_only')"
 
+  @integer_kinds Column.integer_kinds()
+
+  # The kinds whose same-type `=` is the key's own equality and that carry
+  # no collation. Text-family types are left out: their `=` follows the
+  # collation the comparison resolves to, which can be the local column's
+  # nondeterministic one while the key is unique only under its own (`'a'`
+  # then matches both `'A'` and `'a'`), and introspection does not record
+  # collations. Unknown kinds (`:decodable`, `:other`) and `json`/`jsonb`
+  # are left out too.
+  @same_type_kinds [
+    :integer,
+    :bigint,
+    :numeric,
+    :float,
+    :boolean,
+    :uuid,
+    :timestamptz,
+    :timestamp,
+    :date,
+    :enum
+  ]
+
+  @impl Adapter
+  @doc "Whether a join equality preserves a strictly unique target key."
+  @spec lossless_join_pair?(Column.t(), Column.t()) :: boolean()
+  def lossless_join_pair?(%Column{base_kind: local}, %Column{base_kind: remote})
+      when local in @integer_kinds and remote in @integer_kinds,
+      do: true
+
+  def lossless_join_pair?(
+        %Column{base_kind: kind, pg_type: type, type_schema: schema},
+        %Column{base_kind: kind, pg_type: type, type_schema: schema}
+      )
+      when kind in @same_type_kinds,
+      do: true
+
+  def lossless_join_pair?(_local, _remote), do: false
+
   @impl Adapter
   @doc "Introspects tables and views; see `Authzura.Adapters.Postgres.Introspection.introspect/2`."
   defdelegate introspect(repo, refs), to: Introspection

@@ -5,7 +5,9 @@ defmodule Mix.Tasks.Authzura.Bench.Seed do
   Prepares the benchmark: the `authzura_bench` database, its seeded
   dataset, and the bench Hasura with the bench permissions.
 
-      MIX_ENV=bench mix authzura.bench.seed --scale small|large [--seed N] [--no-compose]
+      MIX_ENV=bench mix authzura.bench.seed --scale small|large [--seed N] [--no-compose | --db-only]
+
+  When both flags are supplied, `--db-only` takes precedence over `--no-compose`.
 
   In order:
 
@@ -19,6 +21,14 @@ defmodule Mix.Tasks.Authzura.Bench.Seed do
        the dataset (`Authzura.Bench.Dataset.load!/3`, in one transaction),
        and runs `VACUUM (ANALYZE)`
     5. replaces the Hasura's metadata with `Authzura.Bench.Metadata.build/0`
+
+  `--db-only` runs steps 1 and 2 and the load and `VACUUM (ANALYZE)` of step
+  4, and nothing that needs a Hasura: no start, no guard, no metadata. It
+  needs only `AUTHZURA_BENCH_DB_URL`. It seeds data only: Authzura reads the
+  permissions from the catalog a Hasura has written, so on a `--db-only`
+  database the scenarios cannot run through Authzura. Capture
+  `Authzura.Bench.Measure.authzura_sql/2` on a full stack and replay it there
+  with `raw_plan/3`.
 
   It prints the table sizes and the dataset checksum. The targets come from
   `AUTHZURA_BENCH_DB_URL`, `AUTHZURA_BENCH_HASURA_URL` and
@@ -40,7 +50,9 @@ defmodule Mix.Tasks.Authzura.Bench.Seed do
   @impl Mix.Task
   def run(args) do
     {opts, _rest} =
-      OptionParser.parse!(args, strict: [scale: :string, seed: :integer, no_compose: :boolean])
+      OptionParser.parse!(args,
+        strict: [scale: :string, seed: :integer, no_compose: :boolean, db_only: :boolean]
+      )
 
     scale = scale!(opts[:scale])
     seed = Keyword.get(opts, :seed, Dataset.default_seed())
@@ -49,15 +61,24 @@ defmodule Mix.Tasks.Authzura.Bench.Seed do
     _ = Postgres.storage_up(Repo.config())
     {:ok, _pid} = Repo.start_link()
 
-    prepare_database!()
-    compose(opts[:no_compose])
-    check_hasura!()
-    load!(scale, seed)
-    replace_metadata!()
+    Enum.each(steps(opts), &step(&1, scale, seed))
   end
 
-  defp compose(true), do: :ok
-  defp compose(_start), do: start_hasura!()
+  @doc false
+  @spec steps(keyword()) :: [atom()]
+  def steps(opts) do
+    cond do
+      opts[:db_only] -> [:prepare_database, :load]
+      opts[:no_compose] -> [:prepare_database, :check_hasura, :load, :replace_metadata]
+      true -> [:prepare_database, :start_hasura, :check_hasura, :load, :replace_metadata]
+    end
+  end
+
+  defp step(:prepare_database, _scale, _seed), do: prepare_database!()
+  defp step(:start_hasura, _scale, _seed), do: start_hasura!()
+  defp step(:check_hasura, _scale, _seed), do: check_hasura!()
+  defp step(:load, scale, seed), do: load!(scale, seed)
+  defp step(:replace_metadata, _scale, _seed), do: replace_metadata!()
 
   defp scale!(name) when is_map_key(@scales, name), do: Map.fetch!(@scales, name)
 

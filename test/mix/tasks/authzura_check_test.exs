@@ -91,12 +91,7 @@ defmodule Mix.Tasks.Authzura.CheckTest do
       %{
         table: {"public", "key_kinds"},
         object_relationships: [
-          %{
-            name: "user",
-            using: %{
-              manual_configuration: %{remote_table: @users, column_mapping: %{code: "email"}}
-            }
-          }
+          HasuraFixture.object_relationship("user", @users, %{code: "email"})
         ],
         select_permissions: HasuraFixture.select_permissions("user", ["id"])
       }

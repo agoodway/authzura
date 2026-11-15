@@ -42,4 +42,35 @@ defmodule Authzura.Integration.FingerprintTest do
 
     assert {:ok, ^before} = Introspection.fingerprint(Repo, [{"audit", "users"}])
   end
+
+  describe "strict key inputs" do
+    setup do
+      Repo.query!(
+        "CREATE TABLE public.fp_scratch (id int CONSTRAINT fp_scratch_pkey PRIMARY KEY)"
+      )
+
+      on_exit(fn -> Repo.query!("DROP TABLE IF EXISTS public.fp_child, public.fp_scratch") end)
+      refs = [{"public", "fp_scratch"}]
+      {:ok, plain} = Introspection.fingerprint(Repo, refs)
+      %{refs: refs, plain: plain}
+    end
+
+    # Pre-existing coverage: the digest already hashes pg_get_constraintdef.
+    test "making a key deferrable changes the fingerprint", %{refs: refs, plain: plain} do
+      Repo.query!("ALTER TABLE public.fp_scratch DROP CONSTRAINT fp_scratch_pkey")
+
+      Repo.query!(
+        "ALTER TABLE public.fp_scratch ADD CONSTRAINT fp_scratch_pkey PRIMARY KEY (id) DEFERRABLE"
+      )
+
+      assert {:ok, deferrable} = Introspection.fingerprint(Repo, refs)
+      assert deferrable != plain
+    end
+
+    test "adding an inheritance child changes the fingerprint", %{refs: refs, plain: plain} do
+      Repo.query!("CREATE TABLE public.fp_child () INHERITS (public.fp_scratch)")
+      assert {:ok, inherited} = Introspection.fingerprint(Repo, refs)
+      assert inherited != plain
+    end
+  end
 end

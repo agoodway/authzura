@@ -93,6 +93,9 @@ defmodule Authzura.Bench.Measure do
   @max_db_ratio 1.25
   @max_buffer_ratio 1.5
   @counted [:data, :transaction_control, :setup]
+  @analyzed "ANALYZE, BUFFERS, FORMAT JSON"
+  @order_providers ["Limit", "Result", "Nested Loop", "Merge Join", "Gather Merge"]
+  @sorts ["Sort", "Incremental Sort"]
 
   @transaction_control ~r/\A\s*(BEGIN|COMMIT|END|ROLLBACK|ABORT|START\s+TRANSACTION|SET\s+TRANSACTION|SAVEPOINT|RELEASE)\b/i
   @setup ~r/\A\s*(SET\s+LOCAL\b|SELECT\s+(pg_catalog\.)?(set_config|current_setting)\s*\()/i
@@ -147,7 +150,7 @@ defmodule Authzura.Bench.Measure do
   """
   @spec measure(Scenarios.scenario(), keyword()) :: result()
   def measure(%{id: id, preload_levels: levels} = scenario, opts \\ []) do
-    mode = Keyword.get(opts, :mode, :default)
+    mode = mode(opts)
     %{statements: statements} = db_time = db_time(scenario, opts)
 
     results = %{
@@ -177,7 +180,7 @@ defmodule Authzura.Bench.Measure do
   """
   @spec statements(engine(), Scenarios.scenario(), pos_integer(), keyword()) :: statements()
   def statements(engine, scenario, n \\ 200, opts \\ []) when is_integer(n) and n > 0 do
-    request = requester(engine, scenario, Keyword.get(opts, :mode, :default))
+    request = requester(engine, scenario, opts)
 
     repeat(request, warmup(engine, opts))
     Repo.query!(@reset)
@@ -281,10 +284,8 @@ defmodule Authzura.Bench.Measure do
   end
 
   def plans(:authzura, scenario, opts) do
-    mode = Keyword.get(opts, :mode, :default)
-
     scenario
-    |> capture(mode)
+    |> capture(opts)
     |> Enum.filter(fn {query, _params} -> classify(query) == :data end)
     |> Enum.map(fn {query, params} -> steady_explain(query, params) end)
   end
@@ -300,6 +301,88 @@ defmodule Authzura.Bench.Measure do
 
   def parse_plan(%{"Plan" => root}),
     do: %{table_scans: scans(root), shared_buffers: buffers(root)}
+
+  @doc """
+  The root data statement of `scenario`'s Authzura read, `{sql, params}`, as
+  `all_input/4` runs it, captured from the repo's query telemetry event.
+
+  Options: `:mode` (default `:default`) and `:join_lift` (a boolean, passed to
+  `Authzura.Test.InternalRead.all_input/5`). It defaults to `true`; `false`
+  captures the original unlifted input SQL for matched controls.
+  """
+  @spec authzura_sql(Scenarios.scenario(), keyword()) :: {String.t(), list()}
+  def authzura_sql(scenario, opts \\ []) do
+    scenario
+    |> capture(opts)
+    |> Enum.find(fn {query, _params} -> classify(query) == :data end)
+  end
+
+  @doc """
+  The raw `EXPLAIN (FORMAT JSON)` result of `{sql, params}`, node types
+  kept (`pk_walk?/2` reads it), as the decoded map with the `"Plan"` key.
+
+    * `:custom` runs once, unnamed, with the parameters bound: the plan
+      `all_input/4` gets uncached.
+    * `:generic` prepares the statement and explains `EXECUTE` under
+      `SET plan_cache_mode = force_generic_plan`, so the plan is a generic one.
+
+  Options: `:repo` (default the benchmark repo), `:analyze` (default `true`, adds `ANALYZE, BUFFERS`), and
+  `:after_explain`, an optional unary callback for generic plans. It receives
+  the prepared statement's name on the checked-out connection after EXPLAIN
+  and before DEALLOCATE, so callers can inspect its plan-use counters. The
+  default callback does nothing. The generic path issues RESET plan_cache_mode
+  afterward (also on callback failure); callers using SET LOCAL must reapply
+  their regime before subsequent reads in the same transaction.
+  """
+  @spec raw_plan({String.t(), list()}, :custom | :generic, keyword()) :: map()
+  def raw_plan({sql, params}, regime, opts \\ []) when regime in [:custom, :generic] do
+    [plan] =
+      raw_explain(
+        sql,
+        params,
+        regime,
+        explain_options(Keyword.get(opts, :analyze, true)),
+        Keyword.get(opts, :after_explain, &noop/1),
+        Keyword.get(opts, :repo, Repo)
+      )
+
+    plan
+  end
+
+  defp explain_options(true), do: @analyzed
+  defp explain_options(false), do: "FORMAT JSON"
+
+  @doc """
+  `false` unless `plan` has a `Limit` root. Otherwise true when it reads
+  `table` in primary-key order: the order-providing path (the outer child of a `Limit`,
+  `Result`, `Nested Loop`, `Merge Join` or `Gather Merge`; InitPlans are
+  skipped, and a child without a `"Parent Relationship"` is taken by
+  position) reaches an `Index Scan` or `Index Only Scan` on `<table>_pkey`
+  before any `Sort` or `Incremental Sort`.
+  """
+  @spec pk_walk?([map()] | map(), String.t()) :: boolean()
+  def pk_walk?([explain], table), do: pk_walk?(explain, table)
+
+  def pk_walk?(%{"Plan" => %{"Node Type" => "Limit"} = root}, table),
+    do: walks_pk?(root, table <> "_pkey")
+
+  def pk_walk?(%{"Plan" => _root}, _table), do: false
+
+  defp walks_pk?(%{"Node Type" => type}, _index) when type in @sorts, do: false
+
+  defp walks_pk?(%{"Node Type" => type, "Index Name" => index}, index)
+       when type in ["Index Scan", "Index Only Scan"],
+       do: true
+
+  defp walks_pk?(%{"Node Type" => type, "Plans" => [_ | _] = children}, index)
+       when type in @order_providers,
+       do: children |> outer() |> walks_pk?(index)
+
+  defp walks_pk?(_node, _index), do: false
+
+  # The outer child, else (a hand-written plan) the first one.
+  defp outer(children),
+    do: Enum.find(children, &(Map.get(&1, "Parent Relationship") == "Outer")) || hd(children)
 
   @doc "Evaluates the targets of `scenario`'s measured `results` in `mode`."
   @spec check(map(), Scenarios.scenario(), Bench.mode()) :: targets()
@@ -355,15 +438,16 @@ defmodule Authzura.Bench.Measure do
 
   def handle_query(_event, _measurements, _metadata, _config), do: :ok
 
-  defp requester(:hasura, %{read: %Read{table: table} = read, auth: auth}, _mode) do
+  defp requester(:hasura, %{read: %Read{table: table} = read, auth: auth}, _opts) do
     {graphql, variables} = Runner.graphql(read)
     root_field = Read.root_field(table)
     fn -> {:ok, _rows} = Hasura.query(graphql, variables, root_field, auth) end
   end
 
-  defp requester(:authzura, %{read: read, auth: auth}, mode) do
-    instance = Bench.instance(mode)
-    fn -> {:ok, _rows} = Runner.authzura(read, auth, instance) end
+  defp requester(:authzura, %{read: read, auth: auth}, opts) do
+    instance = opts |> mode() |> Bench.instance()
+    run_opts = Keyword.take(opts, [:join_lift])
+    fn -> {:ok, _rows} = Runner.authzura(read, auth, instance, run_opts) end
   end
 
   defp repeat(request, n), do: Enum.each(1..n, fn _i -> request.() end)
@@ -401,13 +485,14 @@ defmodule Authzura.Bench.Measure do
 
   # Authzura's statements for one request, from its repo's query event, in
   # memory only. Only this process's statements are kept.
-  defp capture(scenario, mode) do
+  defp capture(scenario, opts) do
     ref = make_ref()
     id = {__MODULE__, ref}
-    request = requester(:authzura, scenario, mode)
+    request = requester(:authzura, scenario, opts)
+    event = opts |> mode() |> Bench.query_event()
 
     :ok =
-      :telemetry.attach(id, Bench.query_event(mode), &__MODULE__.handle_query/4, {self(), ref})
+      :telemetry.attach(id, event, &__MODULE__.handle_query/4, {self(), ref})
 
     try do
       request.()
@@ -426,9 +511,29 @@ defmodule Authzura.Bench.Measure do
     end
   end
 
-  defp explain(query, params) do
-    %{rows: [[plan]]} = Repo.query!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " <> query, params)
-    parse_plan(plan)
+  defp explain(query, params),
+    do: query |> raw_explain(params, :custom, @analyzed, &noop/1, Repo) |> parse_plan()
+
+  defp mode(opts), do: Keyword.get(opts, :mode, :default)
+  defp noop(_name), do: :ok
+
+  defp raw_explain(query, params, :custom, options, _after_explain, repo) do
+    %{rows: [[plan]]} = repo.query!("EXPLAIN (#{options}) " <> query, params)
+    plan
+  end
+
+  defp raw_explain(query, params, :generic, options, after_explain, repo) do
+    prepared(repo, query, params, fn execute ->
+      repo.query!("SET plan_cache_mode = force_generic_plan")
+
+      try do
+        %{rows: [[plan]]} = repo.query!("EXPLAIN (#{options}) " <> execute)
+        after_explain.(@explained)
+        plan
+      after
+        repo.query!("RESET plan_cache_mode")
+      end
+    end)
   end
 
   # The plan the steady state runs: on one connection, the statement is
@@ -437,29 +542,36 @@ defmodule Authzura.Bench.Measure do
   # `EXECUTE` takes no bind parameters, so each value is rendered as a
   # literal of its parameter's type by Postgres itself.
   defp steady_explain(query, params) do
-    Repo.checkout(fn ->
-      Repo.query!("PREPARE #{@explained} AS " <> query)
+    prepared(Repo, query, params, fn execute ->
+      repeat(fn -> Repo.query!(execute) end, @custom_plans)
+      explain(execute, [])
+    end)
+  end
+
+  # Runs `fun` with the `EXECUTE` statement of `query` prepared on one
+  # connection, and deallocates it afterwards.
+  defp prepared(repo, query, params, fun) do
+    repo.checkout(fn ->
+      repo.query!("PREPARE #{@explained} AS " <> query)
 
       try do
-        execute = "EXECUTE #{@explained}" <> arguments(params)
-        repeat(fn -> Repo.query!(execute) end, @custom_plans)
-        explain(execute, [])
+        fun.("EXECUTE #{@explained}" <> arguments(repo, params))
       after
-        Repo.query!("DEALLOCATE #{@explained}")
+        repo.query!("DEALLOCATE #{@explained}")
       end
     end)
   end
 
-  defp arguments([]), do: ""
+  defp arguments(_repo, []), do: ""
 
-  defp arguments(params) do
-    %{rows: [[types]]} = Repo.query!(@parameter_types, [@explained])
-    "(" <> (params |> Enum.zip_with(types, &literal/2) |> Enum.join(", ")) <> ")"
+  defp arguments(repo, params) do
+    %{rows: [[types]]} = repo.query!(@parameter_types, [@explained])
+    "(" <> (params |> Enum.zip_with(types, &literal(repo, &1, &2)) |> Enum.join(", ")) <> ")"
   end
 
   # The type names come from the catalog (`regtype` output is quoted).
-  defp literal(value, type) do
-    %{rows: [[literal]]} = Repo.query!("SELECT quote_nullable(($1::#{type})::text)", [value])
+  defp literal(repo, value, type) do
+    %{rows: [[literal]]} = repo.query!("SELECT quote_nullable(($1::#{type})::text)", [value])
     "#{literal}::#{type}"
   end
 

@@ -1,6 +1,6 @@
 defmodule Authzura.Bench.Scenarios do
   @moduledoc """
-  The 17 benchmark scenarios. Test harness only.
+  The 19 benchmark scenarios. Test harness only.
 
   Each is `%{id, read, auth, preload_levels}`:
 
@@ -38,6 +38,7 @@ defmodule Authzura.Bench.Scenarios do
       columns-narrow input-filter input-regex limit-permission page-1000
       preload-object preload-array-limited preload-nested-3
       input-selective input-pk input-rel-permission preload-large-batch
+      input-rel-broad-limit input-col-broad-limit
     )
 
   @doc """
@@ -60,6 +61,22 @@ defmodule Authzura.Bench.Scenarios do
 
     {:jwt, %{@namespace => session}, role}
   end
+
+  @doc """
+  `scenario` with the session's organization (`x-hasura-org-id`) replaced by
+  `org_id`. Only the JWT claims change, so both engines see the new session.
+  """
+  @spec with_org(scenario(), pos_integer()) :: scenario()
+  def with_org(%{auth: {:jwt, claims, role}} = scenario, org_id) when is_integer(org_id) do
+    claims = put_in(claims, [@namespace, "x-hasura-org-id"], to_string(org_id))
+    %{scenario | auth: {:jwt, claims, role}}
+  end
+
+  @doc "Fetches a scenario by id, raising for an unknown id."
+  @spec fetch!(String.t()) :: scenario()
+  def fetch!(id),
+    do:
+      Enum.find(all(), &(&1.id == id)) || raise(ArgumentError, "unknown scenario: #{inspect(id)}")
 
   @doc "Every scenario, in `ids/0` order."
   @spec all() :: [scenario()]
@@ -145,12 +162,7 @@ defmodule Authzura.Bench.Scenarios do
       scenario(
         "input-rel-permission",
         "deep",
-        Read.new(@comments,
-          columns: ~w(id article_id body),
-          where: %{"body" => %{"_like" => "%7"}},
-          order_by: @by_id,
-          limit: 100
-        )
+        comment_ids_like_7()
       ),
       scenario(
         "preload-large-batch",
@@ -159,6 +171,18 @@ defmodule Authzura.Bench.Scenarios do
           limit: 1_000,
           relationships: [{"author", object(~w(id email role))}]
         )
+      ),
+      # A permission about half the rows satisfy, with a LIMIT on an ordered
+      # primary key: the unlifted control walks the key.
+      scenario(
+        "input-rel-broad-limit",
+        "broad",
+        comment_ids_like_7()
+      ),
+      scenario(
+        "input-col-broad-limit",
+        "broad",
+        articles(~w(id title), where: %{"title" => %{"_like" => "%7"}}, limit: 100)
       )
     ]
   end
@@ -169,6 +193,17 @@ defmodule Authzura.Bench.Scenarios do
   # The preload nodes of a read: its relationships, at every depth.
   defp levels(%Read{relationships: relationships}),
     do: Enum.sum_by(relationships, fn {_name, nested} -> 1 + levels(nested) end)
+
+  # The input-filtered, pk-ordered comments read of the relationship-permission
+  # scenarios (`deep` and `broad` differ only in the role).
+  defp comment_ids_like_7 do
+    Read.new(@comments,
+      columns: ~w(id article_id body),
+      where: %{"body" => %{"_like" => "%7"}},
+      order_by: @by_id,
+      limit: 100
+    )
+  end
 
   defp articles(columns, fields),
     do: Read.new(@articles, [columns: columns, order_by: @by_id] ++ fields)

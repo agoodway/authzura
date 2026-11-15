@@ -117,6 +117,57 @@ defmodule Authzura.Bench.MeasureTest do
     end
   end
 
+  describe "pk_walk?/2" do
+    test "a Limit over a Nested Loop whose outer side is the primary-key index is a walk" do
+      assert Measure.pk_walk?(
+               plan(
+                 plan_node("Limit", [plan_node("Nested Loop", [pkey(), plan_node("Seq Scan")])])
+               ),
+               "comments"
+             )
+
+      assert Measure.pk_walk?([plan(plan_node("Limit", [pkey("Index Only Scan")]))], "comments")
+    end
+
+    test "InitPlans listed first are skipped: the walk follows the outer child" do
+      init = plan_node("Result", [], %{"Parent Relationship" => "InitPlan"})
+      outer = Map.put(pkey(), "Parent Relationship", "Outer")
+      limit = plan_node("Limit", [init, outer])
+
+      assert Measure.pk_walk?(plan(limit), "comments")
+
+      sorted = plan_node("Sort", [], %{"Parent Relationship" => "Outer"})
+      refute Measure.pk_walk?(plan(plan_node("Limit", [init, sorted])), "comments")
+    end
+
+    test "only a Limit root starts a walk" do
+      refute Measure.pk_walk?(plan(pkey()), "comments")
+      refute Measure.pk_walk?(plan(plan_node("Nested Loop", [pkey()])), "comments")
+    end
+
+    test "a Sort before the index is not a walk" do
+      refute Measure.pk_walk?(plan(plan_node("Limit", [plan_node("Sort", [pkey()])])), "comments")
+
+      refute Measure.pk_walk?(
+               plan(plan_node("Limit", [plan_node("Incremental Sort", [pkey()])])),
+               "comments"
+             )
+    end
+
+    test "a Nested Loop that sorts its outer side and probes the key inside is not a walk" do
+      loop = plan_node("Nested Loop", [plan_node("Sort", [plan_node("Seq Scan")]), pkey()])
+
+      refute Measure.pk_walk?(plan(plan_node("Limit", [loop])), "comments")
+    end
+
+    test "another index, or another table's key, is not a walk" do
+      other = plan_node("Index Scan", [], %{"Index Name" => "comments_article_id_index"})
+
+      refute Measure.pk_walk?(plan(plan_node("Limit", [other])), "comments")
+      refute Measure.pk_walk?(plan(plan_node("Limit", [pkey()])), "articles")
+    end
+  end
+
   describe "summarize/2" do
     # Drift that hits both engines in a repetition (a cold cache, a plan
     # cache transition) cancels in the paired ratios.
@@ -162,8 +213,8 @@ defmodule Authzura.Bench.MeasureTest do
 
   describe "check/3" do
     test "targets: db_time 1.25 pass / 1.251 fail; data == 1+L; read-only-connection needs 0 transaction control" do
-      flat = scenario("flat-tenant")
-      nested = scenario("preload-nested-3")
+      flat = Scenarios.fetch!("flat-tenant")
+      nested = Scenarios.fetch!("preload-nested-3")
 
       assert %{db_time: :pass} = Measure.check(results(ratio: 1.25), flat, :default)
       assert %{db_time: :fail} = Measure.check(results(ratio: 1.251), flat, :default)
@@ -191,7 +242,7 @@ defmodule Authzura.Bench.MeasureTest do
     end
 
     test "indexes: every table Hasura reads through an index, Authzura does too" do
-      flat = scenario("flat-tenant")
+      flat = Scenarios.fetch!("flat-tenant")
       index = [{"articles", :index, "articles_org_id_index"}]
       seq = [{"articles", :seq, nil}]
 
@@ -206,7 +257,7 @@ defmodule Authzura.Bench.MeasureTest do
     end
 
     test "buffers: at most 1.5 times Hasura's" do
-      flat = scenario("flat-tenant")
+      flat = Scenarios.fetch!("flat-tenant")
 
       assert %{buffers: :pass} = Measure.check(results(buffers: {100, 150}), flat, :default)
       assert %{buffers: :fail} = Measure.check(results(buffers: {100, 151}), flat, :default)
@@ -231,7 +282,7 @@ defmodule Authzura.Bench.MeasureTest do
     end
 
     test "statements/4 counts one data statement per Authzura request and excludes background" do
-      flat = scenario("flat-tenant")
+      flat = Scenarios.fetch!("flat-tenant")
 
       assert %{counts: counts, db_ms: db_ms} = Measure.statements(:authzura, flat, 10)
       assert counts.data == 1.0
@@ -245,7 +296,7 @@ defmodule Authzura.Bench.MeasureTest do
     end
 
     test "plans/2 explains each engine's data statements" do
-      flat = scenario("flat-tenant")
+      flat = Scenarios.fetch!("flat-tenant")
 
       assert [%{table_scans: [{"articles", _kind, _index} | _], shared_buffers: buffers}] =
                Measure.plans(:authzura, flat)
@@ -254,8 +305,6 @@ defmodule Authzura.Bench.MeasureTest do
       assert [%{table_scans: [_ | _]}] = Measure.plans(:hasura, flat)
     end
   end
-
-  defp scenario(id), do: Enum.find(Scenarios.all(), &(&1.id == id))
 
   defp results(opts) do
     scans = [{"articles", :index, "articles_org_id_index"}]
@@ -289,4 +338,12 @@ defmodule Authzura.Bench.MeasureTest do
       }
     }
   end
+
+  defp plan(root), do: %{"Plan" => root}
+
+  defp plan_node(type, children \\ [], extra \\ %{}),
+    do: Map.merge(%{"Node Type" => type, "Plans" => children}, extra)
+
+  defp pkey(type \\ "Index Scan"),
+    do: plan_node(type, [], %{"Relation Name" => "comments", "Index Name" => "comments_pkey"})
 end

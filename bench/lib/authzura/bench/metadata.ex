@@ -18,6 +18,10 @@ defmodule Authzura.Bench.Metadata do
       capped at 2 per parent
     * `arr` - articles of the organizations in the session array variable
       (`_in`)
+    * `broad` - published articles, and comments whose article is
+      published: a permission about half the rows satisfy (the
+      `*-broad-limit` scenarios). The unlifted relationship control walks
+      an ordered index; the measured PG18 lifted generic plan does not
     * `open` - every article. It is a negative control for the gate's
       permission guard and no scenario uses it
   """
@@ -64,7 +68,7 @@ defmodule Authzura.Bench.Metadata do
   defp users do
     %{
       table: @users,
-      object_relationships: [fk("org", "org_id")],
+      object_relationships: [HasuraFixture.fk_relationship("org", "org_id")],
       select_permissions: [perm("tenant", @user_columns, %{})]
     }
   end
@@ -74,8 +78,13 @@ defmodule Authzura.Bench.Metadata do
   defp articles do
     %{
       table: @articles,
-      object_relationships: [fk("author", "author_id"), fk("org", "org_id")],
-      array_relationships: [array("comments", @comments, "article_id")],
+      object_relationships: [
+        HasuraFixture.fk_relationship("author", "author_id"),
+        HasuraFixture.fk_relationship("org", "org_id")
+      ],
+      array_relationships: [
+        HasuraFixture.fk_relationship("comments", %{table: @comments, column: "article_id"})
+      ],
       select_permissions: [
         perm("tenant", @article_columns, %{"org_id" => %{"_eq" => @org_id}}),
         perm("author", @article_columns, %{
@@ -94,6 +103,7 @@ defmodule Authzura.Bench.Metadata do
         }),
         perm("limited", @article_columns, %{"is_published" => %{"_eq" => true}}, @limit_articles),
         perm("arr", @article_columns, %{"org_id" => %{"_in" => "X-Hasura-Org-Ids"}}),
+        perm("broad", @article_columns, %{"status" => %{"_eq" => "published"}}),
         perm("open", @article_columns, %{})
       ]
     }
@@ -102,7 +112,10 @@ defmodule Authzura.Bench.Metadata do
   defp comments do
     %{
       table: @comments,
-      object_relationships: [fk("article", "article_id"), fk("author", "author_id")],
+      object_relationships: [
+        HasuraFixture.fk_relationship("article", "article_id"),
+        HasuraFixture.fk_relationship("author", "author_id")
+      ],
       select_permissions: [
         perm("tenant", @comment_columns, %{
           "article" => %{"org_id" => %{"_eq" => @org_id}}
@@ -110,6 +123,7 @@ defmodule Authzura.Bench.Metadata do
         perm("deep", @comment_columns, %{
           "article" => %{"author" => %{"org" => %{"id" => %{"_eq" => @org_id}}}}
         }),
+        perm("broad", @comment_columns, %{"article" => %{"is_published" => %{"_eq" => true}}}),
         perm("limited", @comment_columns, %{}, @limit_comments)
       ]
     }
@@ -122,9 +136,4 @@ defmodule Authzura.Bench.Metadata do
 
   defp limit_entry(nil), do: %{}
   defp limit_entry(limit), do: %{limit: limit}
-
-  defp fk(name, column), do: %{name: name, using: %{foreign_key_constraint_on: column}}
-
-  defp array(name, table, column),
-    do: %{name: name, using: %{foreign_key_constraint_on: %{table: table, column: column}}}
 end

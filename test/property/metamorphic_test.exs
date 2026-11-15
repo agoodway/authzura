@@ -10,8 +10,8 @@ defmodule Authzura.MetamorphicTest do
   forced case per denial class (`Gen.sweep/0`), the rest drawn from the
   random stream with request seed `AUTHZURA_PROP_SEED + i + 1000 * k`
   (`k` is the property's own offset). Per batch it serves the batch's
-  metadata, checks guard (a) (no `:deny` diagnostic at all; warnings are
-  printed), runs the cases, then asserts the vacuity guards (b)-(d) on the
+  metadata, checks guard (a) (no `:deny` diagnostic at all; warnings appear
+  on failure), runs the cases, then asserts the vacuity guards (b)-(d) on the
   random stream (`Authzura.Test.Vacuity`); guard (e) is asserted over the
   whole run, not per batch: the forced sweep gives every batch one case of
   each denial class and the first property asserts each case's reason, so
@@ -23,20 +23,28 @@ defmodule Authzura.MetamorphicTest do
   projection, `scope/3` and `scope_input/4` run by the caller's own
   `Repo.all`, `get/4` and `one/3`, and Ecto-schema queryables.
   A failure prints the command that replays it.
+
+  Join-lift uses a separate random where-case stream without limits or
+  preloads. It compares unordered and tied root multisets, and sequences
+  only under a visible primary-key order. Failures report batch case,
+  relationship-permission and executed-join counts for both push-down modes.
   """
 
   use Authzura.CommittedCase, async: false
   use ExUnitProperties
 
-  alias Authzura.{Gen, HasuraFixture, TestSource}
+  alias Authzura.{Gen, HasuraFixture, SqlHelper, Store, TelemetryHelper, TestSource}
   alias Authzura.Gen.Catalog
-  alias Authzura.Parity.{Read, Runner}
+  alias Authzura.Model.{Permission, Relationship, Snapshot, Table}
+  alias Authzura.Parity.{Read, Runner, Verdict}
   alias Authzura.Test.{PermissionOracle, PublicReason, Schemas, Seed, Vacuity}
   alias Ecto.Type
 
   @moduletag :property
 
   @instance Module.concat(__MODULE__, Instance)
+  @pushdown_instance Module.concat(__MODULE__, PushdownInstance)
+  @repo_query [:authzura, :test, :repo, :query]
   @schemas %{
     {"public", "organizations"} => Schemas.Organization,
     {"public", "users"} => Schemas.User,
@@ -60,8 +68,23 @@ defmodule Authzura.MetamorphicTest do
         admin_role: Gen.admin_role()
       )
 
-    %{agent: agent, batch_opts: opts}
+    %{agent: agent, batch_opts: opts, metadata: metadata}
   end
+
+  setup :setup_join_lift
+
+  defp setup_join_lift(%{join_lift: true, metadata: metadata, test: test}) do
+    {@pushdown_instance, agent} =
+      HasuraFixture.start_instance_with_source!(@pushdown_instance, Repo, metadata,
+        admin_role: Gen.admin_role(),
+        input_index_pushdown: true
+      )
+
+    TelemetryHelper.forward!(test, [@repo_query], caller_only: true)
+    %{pushdown_agent: agent}
+  end
+
+  defp setup_join_lift(_context), do: :ok
 
   property "never raises; errors are public reasons", context do
     each_batch(context, 0, fn c, result, _batch ->
@@ -138,6 +161,133 @@ defmodule Authzura.MetamorphicTest do
     each_batch(context, 7, &entry_points/3)
   end
 
+  @tag batch: [limits: false, join_lift: true], join_lift: true
+  property "join-lift: the same row set; the same sequence when the order is total; push-down off and on",
+           context do
+    for i <- 1..batches() do
+      batch = Gen.batch(i, context.batch_opts)
+      load_lift_batch!(context, i, batch)
+      {:ok, %{snapshot: snapshot}} = Store.current(@instance)
+      seed = Gen.seed() + i + 8_000
+      {:ok, store} = Agent.start_link(fn -> [] end)
+
+      replayable(context, i, seed, fn ->
+        check all(
+                c <- lift_cases(batch),
+                max_runs: max(div(runs(), batches()), 1),
+                initial_seed: seed
+              ) do
+          observations =
+            for instance <- [@instance, @pushdown_instance] do
+              observation = lift_parity(c, batch, snapshot, instance)
+              {instance, observation}
+            end
+
+          Agent.update(store, &(observations ++ &1))
+        end
+
+        for {instance, pushdown?} <- [{@instance, false}, {@pushdown_instance, true}] do
+          observations = for {^instance, observation} <- Agent.get(store, & &1), do: observation
+          stats = Vacuity.lift_stats(observations)
+          report = "join-lift batch #{i}, seed #{seed}, pushdown=#{pushdown?}: #{inspect(stats)}"
+          assert stats.incomplete == 0, "all-or-nothing lift violated: " <> report
+          assert Vacuity.lift_failures(observations) == [], report
+        end
+      end)
+
+      Agent.stop(store)
+    end
+  end
+
+  @tag batch: [limits: false], join_lift: true
+  test "join-lift pages with a unique tiebreaker include nullable and partial-NULL chains",
+       context do
+    filters = [
+      {{"public", "articles"}, "editor", %{"editor" => %{"manager" => %{"id" => %{"_gt" => 0}}}}},
+      {{"public", "users"}, "manager", %{"manager" => %{"manager" => %{"id" => %{"_gt" => 0}}}}},
+      {{"public", "membership_notes"}, "membership",
+       %{"membership" => %{"level" => %{"_gt" => 0}}}}
+    ]
+
+    batch =
+      Enum.reduce(filters, Gen.batch(1, limits: false), fn {table, _name, filter}, batch ->
+        put_in(batch, ["gen_0", table], %{"columns" => "*", "filter" => filter})
+      end)
+
+    load_lift_batch!(context, 1, batch)
+    {:ok, %{snapshot: %{tables: tables}}} = Store.current(@instance)
+
+    for {table, relationship, filter} <- filters do
+      c = batch |> lift_cases() |> Gen.take(1, 1) |> hd() |> Gen.as_role("gen_0")
+
+      read =
+        Read.new(table,
+          columns: Catalog.names(table),
+          where: %{
+            "_and" => [
+              %{"id" => %{"_gt" => 0}},
+              %{"id" => %{"_in" => Enum.uniq(Catalog.ids().user ++ Catalog.ids().article)}}
+            ]
+          },
+          order_by: [asc: :org_id, desc: :id]
+        )
+
+      c = %{c | read: read}
+      ctx = PermissionOracle.context(c, @instance)
+      assert {:ok, expected} = PermissionOracle.rows(ctx, table, filter, read.where)
+      assert expected != []
+      assert Enum.any?(Enum.frequencies_by(expected, & &1["org_id"]), fn {_org, n} -> n > 1 end)
+      assert {:ok, matching} = PermissionOracle.rows(ctx, table, %{}, read.where)
+      {_kind, _target, mapping} = Catalog.relationship(table, relationship)
+
+      nulls =
+        Enum.filter(matching, fn row ->
+          Enum.any?(mapping, fn {local, _} -> row[local] == nil end)
+        end)
+
+      assert nulls != []
+
+      if map_size(mapping) > 1 do
+        for local <- Map.keys(mapping) do
+          assert Enum.any?(nulls, fn row ->
+                   row[local] == nil and Enum.any?(Map.keys(mapping), &(row[&1] != nil))
+                 end)
+        end
+      end
+
+      for instance <- [@instance, @pushdown_instance] do
+        assert {{:ok, all}, lifted} = executed_read(c, instance, true)
+        assert lifted > 0
+        assert multiset(all) == multiset(expected)
+        assert MapSet.disjoint?(MapSet.new(all, & &1["id"]), MapSet.new(nulls, & &1["id"]))
+
+        pages =
+          for offset <- 0..div(length(all) + 1, 2) do
+            page = %{c | read: %{read | limit: 2, offset: offset * 2}}
+
+            assert {{:ok, unlifted}, unlifted_joins} = executed_read(page, instance, false)
+
+            assert {{:ok, rows}, joins} = executed_read(page, instance, true)
+            assert joins > 0
+            assert unlifted_joins == 0
+            assert rows == unlifted
+            assert rows == Enum.slice(all, offset * 2, 2)
+
+            assert :match =
+                     Verdict.classify(
+                       Verdict.context(page.read, tables),
+                       {:ok, unlifted},
+                       {:ok, rows}
+                     )
+
+            rows
+          end
+
+        assert List.flatten(pages) == all
+      end
+    end
+  end
+
   test "every batch's random stream reaches the must-appear set (partial NULL keys at run time)",
        %{agent: agent} do
     for i <- 1..batches() do
@@ -206,12 +356,12 @@ defmodule Authzura.MetamorphicTest do
 
   # The random stream first, then one forced case per denial class.
   defp check_batch(batch, seed, checked) do
-    check all c <- Gen.request(batch), max_runs: random_runs(), initial_seed: seed do
+    check all(c <- Gen.request(batch), max_runs: random_runs(), initial_seed: seed) do
       checked.(c)
     end
 
     for mutation <- Gen.sweep() do
-      check all c <- Gen.request(batch, mutation: mutation), max_runs: 1, initial_seed: seed do
+      check all(c <- Gen.request(batch, mutation: mutation), max_runs: 1, initial_seed: seed) do
         checked.(c)
       end
     end
@@ -231,15 +381,16 @@ defmodule Authzura.MetamorphicTest do
   end
 
   # Serves `batch` and checks guard (a).
-  defp load!(agent, i, batch) do
+  defp load!(agent, i, batch, instance \\ @instance) do
     snapshot = HasuraFixture.snapshot!(Repo, Gen.metadata(batch))
     :ok = TestSource.put(agent, snapshot: snapshot, version: "batch-#{i}")
-    :ok = Authzura.reload(@instance)
+    :ok = Authzura.reload(instance)
 
-    {:ok, diagnostics} = Authzura.diagnostics(@instance)
+    {:ok, diagnostics} = Authzura.diagnostics(instance)
     {denied, warnings} = Enum.split_with(diagnostics, &(&1.severity == :deny))
-    if warnings != [], do: IO.puts("batch #{i} warnings: #{inspect(warnings)}")
-    assert denied == [], "batch #{i} has deny diagnostics: #{inspect(denied)}"
+
+    assert denied == [],
+           "batch #{i} has deny diagnostics: #{inspect(denied)}; warnings: #{inspect(warnings)}"
   end
 
   defp observe_all(batch, opts) do
@@ -251,6 +402,115 @@ defmodule Authzura.MetamorphicTest do
 
   defp guard_failed?(log, guard),
     do: log |> Vacuity.failures() |> Enum.any?(&String.starts_with?(&1, guard))
+
+  # No forced cases enter lift coverage. No request/permission limits or
+  # preloads: tied and unordered reads must compare whole root multisets.
+  # Paging with a unique final key is checked separately above.
+  defp lift_cases(batch) do
+    batch
+    |> Gen.request(mutation: :none, degenerate: :no_preloads)
+    |> filter(&(is_nil(&1.denial) and where?(&1)))
+    |> map(&unpaged/1)
+  end
+
+  defp load_lift_batch!(context, i, batch) do
+    load!(context.agent, i, batch)
+    load!(context.pushdown_agent, i, batch, @pushdown_instance)
+  end
+
+  defp lift_parity(
+         %{read: %Read{table: table}, role: role} = c,
+         batch,
+         %Snapshot{tables: tables, permissions: permissions},
+         instance
+       ) do
+    counts = assert_lift_parity(c, batch, tables, instance)
+    assert [lifted] = Enum.uniq(counts)
+    %Permission{filter: filter} = Map.fetch!(permissions, {role, table, :select})
+    nullable_hops = relationship_nulls(filter, tables[table], tables)
+    lift_observation(nullable_hops, lifted, length(nullable_hops))
+  end
+
+  defp assert_lift_parity(%{read: %Read{table: table} = read} = c, batch, tables, instance) do
+    orders = Enum.uniq([read.order_by, nil, tied_order(c, batch)])
+
+    for order <- orders do
+      c = %{c | read: %{read | order_by: order}}
+      assert {{:ok, unlifted}, unlifted_joins} = executed_read(c, instance, false)
+      assert {{:ok, lifted}, count} = executed_read(c, instance, true)
+      if count > 0, do: assert(unlifted_joins == 0)
+      # Verdict/Compare preserve multiplicity even when the projection hides the PK.
+      unordered = Verdict.context(%{c.read | order_by: nil}, tables, divergences: [])
+      assert :match = Verdict.classify(unordered, {:ok, unlifted}, {:ok, lifted})
+
+      if keyed?(c, batch) and Gen.total_order?(batch, c, table, order) do
+        ordered = Verdict.context(c.read, tables, divergences: [])
+        assert :match = Verdict.classify(ordered, {:ok, unlifted}, {:ok, lifted})
+      end
+
+      count
+    end
+  end
+
+  # Each hop is an AST occurrence: repeated names require separate aliases.
+  defp lift_observation(nullable_hops, lifted, relationship_count) do
+    %{
+      rel_permission?: relationship_count > 0,
+      lifted: lifted,
+      incomplete?: lifted > 0 and lifted < relationship_count,
+      fallback?: relationship_count > 0 and lifted == 0,
+      nullable_chain?: lifted > 0 and Enum.any?(nullable_hops)
+    }
+  end
+
+  defp tied_order(%{read: %Read{table: table}, role: role}, batch) do
+    visible = Gen.visible(batch, role, table)
+
+    (visible -- Catalog.pk(table))
+    |> Enum.find(&Catalog.orderable?(table, &1))
+    |> column_order()
+  end
+
+  defp column_order(nil), do: nil
+  defp column_order(column), do: [asc: Catalog.atom(column)]
+
+  # Measure the statement that actually executed, after Input/Scope and
+  # all-or-nothing fallback; a compiler candidate is not evidence of a lift.
+  defp executed_read(%{read: read, auth: auth}, instance, join_lift) do
+    {result, [{sql, _params}]} =
+      TelemetryHelper.capture_statements(@repo_query, fn ->
+        Runner.authzura(read, auth, instance, join_lift: join_lift)
+      end)
+
+    {result, SqlHelper.occurrences(sql, "INNER JOIN")}
+  end
+
+  # Observation only: visit every relationship (also under fallback nodes)
+  # and record whether a local mapping column is nullable. Lift selection
+  # remains entirely the compiler's job and is measured from executed SQL.
+  defp relationship_nulls(
+         {:relationship, name, child},
+         %Table{relationships: relationships, columns: columns},
+         tables
+       ) do
+    %Relationship{target: target, mapping: mapping} = Map.fetch!(relationships, name)
+
+    nullable? =
+      Enum.any?(mapping, fn {local, _remote} -> Map.fetch!(columns, local).nullable? end)
+
+    [nullable? | relationship_nulls(child, tables[target], tables)]
+  end
+
+  defp relationship_nulls({:exists, ref, child}, _table, tables),
+    do: relationship_nulls(child, tables[ref], tables)
+
+  defp relationship_nulls({:not, child}, table, tables),
+    do: relationship_nulls(child, table, tables)
+
+  defp relationship_nulls({group, children}, table, tables) when group in [:and, :or],
+    do: Enum.flat_map(children, &relationship_nulls(&1, table, tables))
+
+  defp relationship_nulls(_leaf, _table, _tables), do: []
 
   # The fence compares whole root rows: every column the role sees, no
   # paging, no preloads. The input filter names only such columns, so two

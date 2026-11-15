@@ -44,15 +44,15 @@ Status: **covered** (an existing test asserts it), **partial → ported**
 | 4 | Empty forms: `_in: []` returns no rows | covered | `test/integration/row_filter_test.exs:87`; `test/authzura/adapters/postgres_test.exs:171` |
 | 5 | Empty forms: `_nin: []` returns all rows | covered | `test/integration/row_filter_test.exs:87` |
 | 6 | Empty forms: `_or: []` and `_and: []` (also under `_not`) | covered | `test/integration/row_filter_test.exs:93`; `test/authzura/sources/hasura/bool_exp_test.exs:53` |
-| 7 | NULL: null-aware `_eq`/`_neq` on nullable columns, plain on non-null | covered | `test/integration/row_filter_test.exs:105`; `test/authzura/compiler_test.exs:45,50` |
+| 7 | NULL: null-aware `_eq`/`_neq` on nullable columns, plain on non-null | covered | `test/integration/row_filter_test.exs:105`; `test/authzura/compiler_test.exs:37,42` |
 | 8 | NULL: a literal `null`, and NULL rows under `_not` | covered | `test/integration/row_filter_test.exs:101,110` |
 | 9 | NULL: `_is_null` true and false | covered | `test/integration/row_filter_test.exs:125` |
 | 10 | Relationships: object, array and 3-hop | covered | `test/integration/row_filter_test.exs:132,136,140`; `test/hasura_scenarios/row_filters_test.exs:164,425` |
 | 11 | Relationships: several conditions in one node match the same related row | covered | `test/integration/row_filter_test.exs:145` |
-| 12 | Relationships: sibling nodes stay independent | covered | `test/integration/row_filter_test.exs:145`; `test/authzura/compiler_test.exs:92` |
+| 12 | Relationships: sibling nodes stay independent | covered | `test/integration/row_filter_test.exs:145`; `test/authzura/compiler_test.exs:105` |
 | 13 | Relationships: `relationship: {}` requires a related row | covered | `test/integration/row_filter_test.exs:320` |
 | 14 | Relationships: negated relationships | covered | `test/integration/row_filter_test.exs:320` |
-| 15 | Relationships: multi-column mapping (`MultiColumnObjectRelationshipsSpec.hs`) | partial → ported | `test/integration/row_filter_test.exs:233` (filter); `test/hasura_scenarios/relationships_test.exs:42` (the spec's own selection) |
+| 15 | Relationships: multi-column mapping (`MultiColumnObjectRelationshipsSpec.hs`) | partial → ported | `test/integration/row_filter_test.exs:233` (filter); `test/hasura_scenarios/relationships_test.exs:39` (the spec's own selection) |
 | 16 | Relationships: a self-relationship | covered | `test/integration/row_filter_test.exs:238`; `test/hasura_scenarios/row_filters_test.exs:420` |
 | 17 | Relationships: the target's own permission is not applied inside a filter | covered | `test/integration/row_filter_test.exs:242` |
 | 18 | `_exists`: uncorrelated | covered | `test/integration/row_filter_test.exs:257`; `test/hasura_scenarios/row_filters_test.exs:205,210` |
@@ -65,11 +65,11 @@ Status: **covered** (an existing test asserts it), **partial → ported**
 | 25 | Operators: `_like`, `_ilike`, `_similar`, `_regex` families | covered | `test/integration/row_filter_test.exs:325`; `test/hasura_scenarios/operators_test.exs:83` |
 | 26 | Operators: jsonb `_contains`, `_contained_in`, `_has_key` (+ session), `_has_keys_any`, `_has_keys_all` | covered | `test/integration/row_filter_test.exs:341`; `test/hasura_scenarios/operators_test.exs:56-77` |
 | 27 | Session: case-insensitive names | covered | `test/authzura/session_test.exs:6`; `test/hasura_scenarios/session_variables_test.exs:39` |
-| 28 | Session: a missing variable gives an error (`select_articles_without_required_headers.yaml`) | covered | `test/integration/scope_test.exs:269`; `test/authzura/compiler_test.exs:156`; `test/hasura_scenarios/session_variables_test.exs:147,162` |
+| 28 | Session: a missing variable gives an error (`select_articles_without_required_headers.yaml`) | covered | `test/integration/scope_test.exs:269`; `test/authzura/compiler_test.exs:169`; `test/hasura_scenarios/session_variables_test.exs:147,162` |
 | 29 | Session: array variables `{1,2,3}` and `{}` (`PermissionSpec.hs`) | partial → ported | `test/authzura/adapters/postgres_test.exs:158,172` (adapter); `test/hasura_scenarios/session_variables_test.exs:39,46,73,77` |
 | 30 | Session: quoted and comma elements (`ArrayLiteralTextEncodingSpec.hs`) | partial → ported | `test/authzura/adapters/postgres/values_test.exs:31,37` (unit); `test/hasura_scenarios/operators_test.exs:181` (the spec's literal lists) |
 | 31 | Session: long values aren't truncated (`DoNotTruncateSessionVariables8158Spec.hs`) | partial → ported | `test/authzura/adapters/postgres/values_test.exs:194` (unit); `test/hasura_scenarios/session_variables_test.exs:104` |
-| 32 | Session: a cast failure gives an error, never NULL | covered | `test/authzura/compiler_test.exs:165`; `test/authzura/adapters/postgres/values_test.exs:97` |
+| 32 | Session: a cast failure gives an error, never NULL | covered | `test/authzura/compiler_test.exs:178`; `test/authzura/adapters/postgres/values_test.exs:97` |
 | 33 | Columns: projection holds only requested allowed columns, on the executed SQL | covered | `test/integration/scope_test.exs:116` |
 | 34 | Columns: a disallowed column gives `{:forbidden_columns, _}` (`user_cannot_access_remarks_col.yaml`) | covered | `test/integration/scope_test.exs:138`; `test/hasura_scenarios/columns_test.exs:21,27` |
 | 35 | Columns: `field :x, source: :y` maps to the physical column | covered | `test/integration/scope_test.exs:146` |
@@ -77,14 +77,14 @@ Status: **covered** (an existing test asserts it), **partial → ported**
 | 37 | Input: filtering, sorting or selecting a hidden column is rejected | covered | `test/integration/input_test.exs:123` |
 | 38 | Input: a relationship or `_exists` in input is rejected | covered | `test/integration/input_test.exs:175`; `test/integration/input_hardening_test.exs:141` |
 | 39 | Input: the input filter is ANDed with the permission filter | covered | `test/integration/input_test.exs:200,206`; `test/hasura_scenarios/row_filters_test.exs:110,128` |
-| 40 | Input: plain-equality semantics | covered | `test/integration/input_test.exs:220`; `test/authzura/compiler_test.exs:56` |
+| 40 | Input: plain-equality semantics | covered | `test/integration/input_test.exs:220`; `test/authzura/compiler_test.exs:69` |
 | 41 | Roles: the requested role is allowed | covered | `test/authzura/session_test.exs:33`; `test/authzura/jwt_test.exs:69` |
 | 42 | Roles: a requested role that isn't allowed is rejected | covered | `test/authzura/session_test.exs:25`; `test/authzura/jwt_test.exs:73` |
 | 43 | Roles: the default role is used when none is requested | covered | `test/authzura/session_test.exs:6` |
 | 44 | Roles: an empty-string role counts as absent | covered | `test/authzura/session_test.exs:42` |
 | 45 | Roles: a role without a permission gets `:forbidden` | covered | `test/integration/scope_test.exs:238`; `test/integration/executor_test.exs:224` |
 | 46 | Roles: admin bypass only when configured | covered | `test/integration/scope_test.exs:243,248`; `test/hasura_scenarios/columns_test.exs:27` |
-| 47 | Root fields: `query_root_fields: []` gives `:root_field_disabled` | covered | `test/integration/scope_test.exs:276`; `test/integration/input_test.exs:367`; `test/hasura_scenarios/relationships_test.exs:194` |
+| 47 | Root fields: `query_root_fields: []` gives `:root_field_disabled` | covered | `test/integration/scope_test.exs:276`; `test/integration/input_test.exs:367`; `test/hasura_scenarios/relationships_test.exs:185` |
 | 48 | Limits: `min(caller, permission)` | covered | `test/integration/scope_test.exs:281`; `test/integration/input_test.exs:318` |
 | 49 | Limits: a negative permission limit is a load error | covered | `test/authzura/sources/hasura/metadata_test.exs:114` |
 | 50 | Limits: caller `with_ties` or a non-literal limit is rejected | covered | `test/authzura/query_shape_test.exs:69,73`; `test/integration/scope_test.exs:294`; `test/hasura_scenarios/limits_test.exs:61` |
@@ -99,25 +99,25 @@ Status: **covered** (an existing test asserts it), **partial → ported**
 | 59 | Shapes: an existing root alias is reused | covered | `test/integration/scope_test.exs:320` |
 | 60 | Shapes: a caller join colliding with a reserved alias errors | covered | `test/authzura/query_shape_test.exs:106` |
 | 61 | Shapes: a caller join aliased like a relationship doesn't mis-correlate | covered | `test/integration/scope_test.exs:311` |
-| 62 | Shapes: nesting deeper than the alias pool is rejected without atoms | covered | `test/authzura/compiler_test.exs:253`; `test/authzura/sources/hasura/bool_exp_test.exs:398` |
-| 63 | Preloads: an allowed relationship loads with the target's filter and columns | covered | `test/integration/preload_loader_test.exs:268`; `test/integration/preload_api_test.exs:136`; `test/hasura_scenarios/session_variables_test.exs:169` |
+| 62 | Shapes: nesting deeper than the alias pool is rejected without atoms | covered | `test/authzura/compiler_test.exs:266`; `test/authzura/sources/hasura/bool_exp_test.exs:398` |
+| 63 | Preloads: an allowed relationship loads with the target's filter and columns | covered | `test/integration/preload_loader_test.exs:254`; `test/integration/preload_api_test.exs:136`; `test/hasura_scenarios/session_variables_test.exs:169` |
 | 64 | Preloads: undeclared relationship, or target without select permission, is `:forbidden` | covered | `test/authzura/preload/tree_test.exs:196,201` |
-| 65 | Preloads: a target with disabled root fields is reachable | covered | `test/authzura/preload/tree_test.exs:206`; `test/hasura_scenarios/relationships_test.exs:171` |
-| 66 | Preloads: per-parent permission limit on array relationships | covered | `test/integration/preload_loader_test.exs:190` |
-| 67 | Preloads: an object relationship gives at most one row or `nil` | covered | `test/integration/preload_loader_test.exs:257,425`; divergence `test/hasura_scenarios/relationships_test.exs:95` |
-| 68 | Preloads: mapping columns the role can't select are stripped | covered | `test/integration/preload_loader_test.exs:404`; `test/integration/preload_api_test.exs:151` |
+| 65 | Preloads: a target with disabled root fields is reachable | covered | `test/authzura/preload/tree_test.exs:206`; `test/hasura_scenarios/relationships_test.exs:162` |
+| 66 | Preloads: per-parent permission limit on array relationships | covered | `test/integration/preload_loader_test.exs:178` |
+| 67 | Preloads: an object relationship gives at most one row or `nil` | covered | `test/integration/preload_loader_test.exs:243,411`; divergence `test/hasura_scenarios/relationships_test.exs:86` |
+| 68 | Preloads: mapping columns the role can't select are stripped | covered | `test/integration/preload_loader_test.exs:390`; `test/integration/preload_api_test.exs:151` |
 | 69 | Preloads: plain Ecto preload translated; `where:`/`preload_order:`/`through:`/custom/function rejected | covered | `test/integration/preload_api_test.exs:171`; `test/authzura/preload/tree_test.exs:356,397,412` |
 | 70 | Preloads: `scope`/`scope_input` with a preload is rejected | covered | `test/integration/scope_test.exs:428`; `test/integration/input_test.exs:356` |
-| 71 | Preloads: composite-key and reverse object relationships | covered | `test/integration/preload_loader_test.exs:288,369`; `test/hasura_scenarios/relationships_test.exs:42` |
-| 72 | Preloads: crossed composite tuples | covered | `test/integration/preload_loader_test.exs:327` |
-| 73 | Preloads: partial NULL keys | covered | `test/integration/preload_loader_test.exs:334` |
-| 74 | Preloads: `citext` keys | covered | `test/integration/preload_loader_test.exs:342` |
-| 75 | Preloads: nested three levels deep | covered | `test/integration/preload_loader_test.exs:379` |
+| 71 | Preloads: composite-key and reverse object relationships | covered | `test/integration/preload_loader_test.exs:274,355`; `test/hasura_scenarios/relationships_test.exs:39` |
+| 72 | Preloads: crossed composite tuples | covered | `test/integration/preload_loader_test.exs:313` |
+| 73 | Preloads: partial NULL keys | covered | `test/integration/preload_loader_test.exs:320` |
+| 74 | Preloads: `citext` keys | covered | `test/integration/preload_loader_test.exs:328` |
+| 75 | Preloads: nested three levels deep | covered | `test/integration/preload_loader_test.exs:365` |
 | 76 | Preloads: depth and node limits, repeated self-relationship, wide tree, rejected up front | covered | `test/authzura/preload/tree_test.exs:288,294`; `test/integration/preload_api_test.exs:185` |
-| 77 | Preloads: one snapshot and one generation across levels | covered | `test/integration/preload_consistency_test.exs:116,133` |
+| 77 | Preloads: one snapshot and one generation across levels | covered | `test/integration/preload_consistency_test.exs:118,135` |
 | 78 | Preloads: inside a caller transaction, `:preload_in_transaction` unless trusted | covered | `test/integration/preload_api_test.exs:266,284` |
-| 79 | Preloads: limited array without `order_by` by cardinality; with it by exact order | covered | `test/integration/preload_loader_test.exs:190,200` |
-| 80 | Preloads: stitching fields the caller didn't request are absent | covered | `test/integration/preload_loader_test.exs:404`; `test/integration/preload_api_test.exs:151` |
+| 79 | Preloads: limited array without `order_by` by cardinality; with it by exact order | covered | `test/integration/preload_loader_test.exs:178,188` |
+| 80 | Preloads: stitching fields the caller didn't request are absent | covered | `test/integration/preload_loader_test.exs:390`; `test/integration/preload_api_test.exs:151` |
 | 81 | Prefixes: precedence order | covered | `test/integration/scope_test.exs:176` |
 | 82 | Prefixes: conflicting prefixes resolve in that order | covered | `test/integration/scope_test.exs:176` |
 | 83 | Prefixes: a `Repo.all(..., prefix:)` override can't redirect | covered | `test/integration/scope_test.exs:192`; `test/integration/executor_test.exs:183` |
@@ -148,12 +148,12 @@ Hasura select-permission tests that the catalog does not list, ported to
 | `tests-py/queries/graphql_query/boolexp/basic/query_account_permission_success.yaml`, `..._fail.yaml` | `_exists` on a table named `user`, admin and non-admin | `row_filters_test.exs:205,210` |
 | `tests-py/queries/graphql_query/boolexp/basic/self_referential_relationships.yaml` | self array relationship under `_or` with `_ilike`; self object relationship with `_is_null` | `row_filters_test.exs:420` |
 | `tests-py/queries/graphql_query/boolexp/basic/select_article_author_is_published_and_registered.yaml`, `select_article_author_not_published_or_not_registered.yaml` | object relationship under `_and` and `_or` | `row_filters_test.exs:425` |
-| `tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_permissions.yaml` ([#6931](https://github.com/hasura/graphql-engine/issues/6931)) | a relationship in a user `where` applies the target's permission | `relationships_test.exs:298,308` (divergence) |
+| `tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_permissions.yaml` ([#6931](https://github.com/hasura/graphql-engine/issues/6931)) | a relationship in a user `where` applies the target's permission | `relationships_test.exs:289,299` (divergence) |
 | `tests-py/queries/graphql_query/boolexp/basic/select_uuid_test_in_uuid_col_postgres.yaml` | `_in` on a uuid column | `operators_test.exs:150` |
 | `tests-py/queries/graphql_query/boolexp/basic/in_sql_identifier_array.yaml` | `_nin` on an `information_schema.sql_identifier` column (a domain over `name`, compared as text) | `operators_test.exs:172` |
 | `tests-py/queries/graphql_query/limits/select_query_article_limit_1.yaml`, `_limit_2.yaml`, `_limit_null.yaml`, `_neg_limit_error.yaml` | caller limit with order and an object relationship; no limit; negative limit | `limits_test.exs:46,51,56,61` |
-| `lib/api-tests/src/Test/Regression/ObjectRelationshipsLimit7936Spec.hs` | an object relationship whose manual mapping matches two rows | `relationships_test.exs:95` (divergence) |
-| `lib/api-tests/src/Test/Regression/LongIdentifiers3796Spec.hs` | long table, column and relationship names through an array relationship | `relationships_test.exs:228` |
+| `lib/api-tests/src/Test/Regression/ObjectRelationshipsLimit7936Spec.hs` | an object relationship whose manual mapping matches two rows | `relationships_test.exs:86` (divergence) |
+| `lib/api-tests/src/Test/Regression/LongIdentifiers3796Spec.hs` | long table, column and relationship names through an array relationship | `relationships_test.exs:219` |
 | `tests-py/queries/graphql_query/boolexp/search/select_city_where_{like,nlike}.yaml` | `_like` and `_nlike` on a city name, as admin input filters; a role's permission is ANDed with the pattern, and a role without one is `:forbidden` | `search_test.exs:50,55,110,115` |
 | `tests-py/queries/graphql_query/boolexp/search/select_city_where_{ilike,nilike}_postgres.yaml` | `_ilike` and `_nilike` | `search_test.exs:60,65` |
 | `tests-py/queries/graphql_query/boolexp/search/select_city_where_{similar,not_similar}_postgres.yaml` | `_similar` and `_nsimilar` | `search_test.exs:70,75` |
@@ -164,7 +164,7 @@ Hasura select-permission tests that the catalog does not list, ported to
 | `tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_{gt,gte,lt,not_lt,in}.yaml` | comparisons on an author with its articles, as admin input filters; a role's permission is ANDed with them | `comparisons_test.exs:73,78,83,88,96,126,136` |
 | `tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_and_in.yaml` | `_and` of two `_in` conditions, sent as a list (Hasura's single-object form is the divergence below) | `comparisons_test.exs:103` |
 | `tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_in_empty_array_postgres.yaml`, `select_author_article_where_nin_empty_array_postgres.yaml`, `select_author_article_where_nin_empty_array.yaml` | `_in: []` returns no authors, `_nin: []` all | `comparisons_test.exs:114,119` |
-| `lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/SelectPermission/RelationshipSpec.hs` | a table with disabled root fields is reachable through a relationship | `relationships_test.exs:171,194` |
+| `lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/SelectPermission/RelationshipSpec.hs` | a table with disabled root fields is reachable through a relationship | `relationships_test.exs:162,185` |
 
 ## Divergences
 
@@ -172,8 +172,8 @@ Hasura select-permission tests that the catalog does not list, ported to
 |---|---|---|---|
 | `row_filters_test.exs:316` (`RootExistElementAliasing9457Spec.hs`, 2nd case) | `_ceq: ["$", "group"]` inside `_not _exists` returns two rows | the permission is denied, `:forbidden` | intended stage-one difference: column comparison operators are unsupported |
 | `operators_test.exs:121` (`user_query_auction.yaml`) | `$cgt: price` returns auction 4 | denied, `:forbidden` | intended stage-one difference: column comparison operators |
-| `relationships_test.exs:298,308` (#6931) | a relationship in `where` is applied with the target's permission | rejected as `:relationship_in_input`, the empty form `{articles: {}}` included (`relationships_test.exs:315`) | intended: relationships are rejected in input, and a relationship-shaped key reads the same whether it names a relationship, a hidden column or nothing |
-| `relationships_test.exs:95` (`ObjectRelationshipsLimit7936Spec.hs`) | an object relationship matching two rows returns one of them | `{:unsupported_query, {:object_cardinality, "author"}}` | intended: Authzura fails closed rather than pick an arbitrary row |
+| `relationships_test.exs:289,299` (#6931) | a relationship in `where` is applied with the target's permission | rejected as `:relationship_in_input`, the empty form `{articles: {}}` included (`relationships_test.exs:306`) | intended: relationships are rejected in input, and a relationship-shaped key reads the same whether it names a relationship, a hidden column or nothing |
+| `relationships_test.exs:86` (`ObjectRelationshipsLimit7936Spec.hs`) | an object relationship matching two rows returns one of them | `{:unsupported_query, {:object_cardinality, "author"}}` | intended: Authzura fails closed rather than pick an arbitrary row |
 | `comparisons_test.exs:164` (`select_author_article_where_lte.yaml`) | the nested `articles(where: {id: {_gt: 1}})` filters the articles | `{:unsupported_query, {:preload, "articles"}}` | intended: a preload takes columns, order and children only, so a `where` on a nested selection is rejected rather than ignored |
 | `comparisons_test.exs:173` (`select_author_article_where_neq.yaml`) | the nested `articles(where: {is_published: {_neq: false}})` filters the articles | `{:unsupported_query, {:preload, "articles"}}` | intended: as above |
 | `comparisons_test.exs:187` (`select_author_article_where_nin.yaml`) | the nested `articles(where: {id: {_gt: 1}})` filters the articles | `{:unsupported_query, {:preload, "articles"}}` | intended: as above |
@@ -207,7 +207,7 @@ Hasura select-permission-related tests that were reviewed and not ported.
 | `tests-py/queries/graphql_query/limits/select_query_article_string_limit_error.yaml` | GraphQL argument coercion; the equivalent is `test/integration/scope_test.exs:294` |
 | `lib/api-tests/src/Test/Regression/OptimizePermissionFiltersSpec.hs` | SQL shape of an experimental Hasura optimisation |
 | `lib/api-tests/src/Test/Queries/Relationship/PermissionRootReferenceSpec.hs` | `_ceq` with the root reference `$` (column comparison) |
-| `lib/api-tests/src/Test/Queries/PermissionsKnowAboutColumnNullabilitySpec.hs` | SQL-shape test; covered as catalog 7 (`test/authzura/compiler_test.exs:45,50`) |
+| `lib/api-tests/src/Test/Queries/PermissionsKnowAboutColumnNullabilitySpec.hs` | SQL-shape test; covered as catalog 7 (`test/authzura/compiler_test.exs:37,42`) |
 | `lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/{DefaultRootFieldsSpec,SelectPermission/DisableAllRootFieldsSpec,SelectPermission/EnableAggSpec,SelectPermission/EnableAllRootFieldsSpec,SelectPermission/EnablePKSpec}.hs` | GraphQL schema surface (`_by_pk`, `_aggregate`, `_stream` fields); the select root field is catalog 47 |
 | `lib/api-tests/src/Test/Regression/ObjectRelationshipsLimit7936Spec.hs` ("where author name", "Order by author id", "Count articles") | relationship in user `where`/`order_by` input; aggregates |
 | `lib/api-tests/src/Test/Regression/LongIdentifiers3796Spec.hs` (insert cases) | writes |

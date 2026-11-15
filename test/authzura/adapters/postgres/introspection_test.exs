@@ -2,6 +2,7 @@ defmodule Authzura.Adapters.Postgres.IntrospectionTest do
   use Authzura.DataCase, async: true
 
   alias Authzura.Adapters.Postgres.Introspection
+  alias Authzura.FilterFixture
 
   @refs [
     {"public", "users"},
@@ -41,21 +42,21 @@ defmodule Authzura.Adapters.Postgres.IntrospectionTest do
   end
 
   test "reads btree index key columns with their order, leaving out partial, expression, INCLUDE, non-default opclass and collation parts" do
-    Enum.each(
-      [
-        "CREATE INDEX ON public.articles (org_id, title) INCLUDE (body)",
-        "CREATE INDEX ON public.articles (author_id) WHERE editor_id IS NULL",
-        "CREATE INDEX ON public.articles (lower(title))",
-        "CREATE INDEX ON public.articles USING hash (status)",
-        "CREATE INDEX ON public.articles (org_id, published_at DESC NULLS LAST, id)",
-        "CREATE INDEX ON public.articles (author_id, published_at NULLS FIRST)",
-        "CREATE INDEX ON public.articles (org_id, title text_pattern_ops)",
-        ~s|CREATE INDEX ON public.articles (org_id, title COLLATE "C")|
-      ],
-      &Repo.query!/1
-    )
-
-    {:ok, tables, _fks} = Introspection.introspect(Repo, [{"public", "articles"}])
+    tables =
+      FilterFixture.scratch!(
+        Repo,
+        [
+          "CREATE INDEX ON public.articles (org_id, title) INCLUDE (body)",
+          "CREATE INDEX ON public.articles (author_id) WHERE editor_id IS NULL",
+          "CREATE INDEX ON public.articles (lower(title))",
+          "CREATE INDEX ON public.articles USING hash (status)",
+          "CREATE INDEX ON public.articles (org_id, published_at DESC NULLS LAST, id)",
+          "CREATE INDEX ON public.articles (author_id, published_at NULLS FIRST)",
+          "CREATE INDEX ON public.articles (org_id, title text_pattern_ops)",
+          ~s|CREATE INDEX ON public.articles (org_id, title COLLATE "C")|
+        ],
+        ["articles"]
+      )
 
     assert Enum.sort(tables[{"public", "articles"}].indexes) == [
              [{"author_id", :asc}, {"published_at", :asc_nulls_first}],
@@ -94,6 +95,69 @@ defmodule Authzura.Adapters.Postgres.IntrospectionTest do
     assert view.kind == :view
     assert Enum.all?(Map.values(view.columns), & &1.nullable?)
     assert view.primary_key == []
+  end
+
+  defp introspect_strict_key(ddl, name) do
+    tables = FilterFixture.scratch!(Repo, ddl, [name])
+    tables[{"public", name}].strict_key?
+  end
+
+  describe "strict_key?" do
+    test "a plain primary key is strict" do
+      assert introspect_strict_key(["CREATE TABLE sk_plain (id int PRIMARY KEY)"], "sk_plain")
+    end
+
+    test "a DEFERRABLE primary key is not strict" do
+      refute introspect_strict_key(
+               ["CREATE TABLE sk_def (id int PRIMARY KEY DEFERRABLE)"],
+               "sk_def"
+             )
+    end
+
+    test "an INITIALLY DEFERRED primary key is not strict" do
+      refute introspect_strict_key(
+               ["CREATE TABLE sk_init (id int PRIMARY KEY DEFERRABLE INITIALLY DEFERRED)"],
+               "sk_init"
+             )
+    end
+
+    test "an inheritance parent is not strict, and its child is" do
+      ddl = [
+        "CREATE TABLE sk_parent (id int PRIMARY KEY)",
+        "CREATE TABLE sk_child (PRIMARY KEY (id)) INHERITS (sk_parent)"
+      ]
+
+      refute introspect_strict_key(ddl, "sk_parent")
+      assert introspect_strict_key([], "sk_child")
+    end
+
+    test "a partitioned table's key is strict, and so is a partition's" do
+      ddl = [
+        "CREATE TABLE sk_part (id int PRIMARY KEY) PARTITION BY RANGE (id)",
+        "CREATE TABLE sk_part_1 PARTITION OF sk_part FOR VALUES FROM (0) TO (100)"
+      ]
+
+      assert introspect_strict_key(ddl, "sk_part")
+      assert introspect_strict_key([], "sk_part_1")
+    end
+
+    test "a partitioned table whose key index is invalid is not strict" do
+      ddl = [
+        "CREATE TABLE sk_inv (id int NOT NULL, v int) PARTITION BY RANGE (id)",
+        "CREATE TABLE sk_inv_1 PARTITION OF sk_inv FOR VALUES FROM (0) TO (100)",
+        "ALTER TABLE ONLY sk_inv ADD PRIMARY KEY (id)"
+      ]
+
+      refute introspect_strict_key(ddl, "sk_inv")
+    end
+
+    test "a table without a primary key is not strict" do
+      refute introspect_strict_key(["CREATE TABLE sk_none (id int)"], "sk_none")
+    end
+
+    test "a view has no strict key", %{tables: tables} do
+      refute tables[{"public", "published_articles"}].strict_key?
+    end
   end
 
   test "handles quoted identifiers", %{tables: tables} do

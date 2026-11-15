@@ -107,17 +107,12 @@ defmodule Authzura.Integration.InputPushdownTest do
   defp sorted(other), do: other
 
   # The WHERE text before the input fence: the permission and anything hoisted.
-  defp outside(sql) do
-    [_select, where] = String.split(sql, "WHERE")
-    where |> String.split(@fence) |> hd()
-  end
+  defp outside(sql), do: outside_fence(sql, where_only: true)
 
   # Comparisons of `column` in the SQL: the fenced one and a hoisted (pinned) one.
   defp compares(sql, column) do
     ~r/p0\."#{column}" (=|OPERATOR\(pg_catalog\.=\))/ |> Regex.scan(sql) |> length()
   end
-
-  defp occurrences(sql, text), do: sql |> String.split(text) |> length() |> Kernel.-(1)
 
   describe "the SQL" do
     test "is unchanged with the option off: one fenced copy of the input", %{off: off} do

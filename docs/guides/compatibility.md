@@ -65,7 +65,7 @@ GraphQL and in-database JSON work, so only database work is compared
 
 ## Summary
 
-Verdicts of the full rerun (17 scenarios per row, `--requests 1000`):
+Before join-lift: full rerun (17 scenarios per row, `--requests 1000`):
 
 | Scale / mode | pass | fail | inconclusive |
 |---|---|---|---|
@@ -81,17 +81,17 @@ Data statements hold everywhere. Inconclusive means CV above 15 %.
 
 ## Known gaps
 
-- `input-selective`, `input-pk`, `input-rel-permission`, `input-regex`: the
-  input fence (a `CASE`) hides selectivity (up to 1015× DB time at `large`).
-  With `input_index_pushdown`, selective and pk reach about 0.6-0.7× of
-  Hasura; relationship permissions and regex stay fenced (rel-permission
-  about 2-3.4×).
+- Selective/pk default input fences: about 850-1280x DB time (noisy); push-down 0.75-0.80x.
+- Fully lifted `all_input/4` rel-permission: 0.97-1.14x, 1.00x buffers;
+  small default inconclusive (CV 0.53), large still fails the index target.
+- Relationship broad-limit remains open: 3.59-6.95x DB time, 9.64-9.73x buffers.
+- Unliftable permissions and `scope_input/4` retain EXISTS; regex stays fenced.
 - `preload-large-batch` (small): DB time about 2×, generic vs custom plan. Open.
 - `preload-nested-3` (large): `organizations` is a sequential scan, a
   planner choice.
 - DB-time CV above 15 % on sub-millisecond statements: harness limit.
 
-Details: `bench/TRIAGE.md`; all differences: `docs/hasura-differences.md`.
+Details: [benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md); all differences: `docs/hasura-differences.md`.
 
 ## Real-world check
 

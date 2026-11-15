@@ -22,6 +22,14 @@ MIX_ENV=bench mix authzura.bench.seed --scale small
 
 The bench migrations index the foreign keys the scenarios traverse, as adopters do.
 
+`--db-only` seeds the data without touching any Hasura (no start, no guard,
+no metadata); it needs only `AUTHZURA_BENCH_DB_URL`. It seeds data only:
+Authzura reads the permissions from the catalog a Hasura has written, so no
+scenario runs through Authzura on such a database, and neither the DB-only
+nor the Hasura regression tests (`test/bench/`) can run there. Capture a
+statement with `Measure.authzura_sql/2` on a full stack and replay it on a
+`--db-only` target with `Measure.raw_plan/3`.
+
 `--scale large` seeds ten times as many rows. `--no-compose` skips starting
 `hasura_bench` when you run the Hasura yourself (it needs the
 `HASURA_GRAPHQL_JWT_SECRET` of `docker-compose.yml` and the `authzura_bench`
@@ -48,18 +56,22 @@ seed always give the same rows. The seed task prints a per-table checksum.
 ## Roles and scenarios
 
 `Authzura.Bench.Metadata` defines the roles `tenant`, `author`, `member`,
-`deep`, `limited` and `arr` (plus `open`, a negative control). None is
+`deep`, `limited`, `arr` and `broad` (plus `open`, a negative control). None is
 `admin`, and the bench instance has no `admin_role`.
 
-`Authzura.Bench.Scenarios.all/0` lists 17 scenarios: flat, filtered,
+`Authzura.Bench.Scenarios.all/0` lists 19 scenarios: flat, filtered,
 `_exists`, three-hop, session-array, narrow-column, input-filter,
 input-regex, permission-limit, deep-page and three preload shapes, plus
 four regression pins: an input filter on a selective indexed column
 (`input-selective`), a primary-key list through the input path
 (`input-pk`), an input filter under a relationship permission
 (`input-rel-permission`) and a preload over 1,000 parents
-(`preload-large-batch`). Each runs
-the same `Authzura.Parity.Read` on both engines as a JWT.
+(`preload-large-batch`), and two `LIMIT` reads under the `broad` role, which
+about half the rows satisfy (`input-rel-broad-limit`,
+`input-col-broad-limit`). The unlifted relationship control walks the primary
+key under custom and generic plans; the measured PG18 lifted read walks it
+only under the custom plan. Broad-limit remains a DB-time/buffer gap.
+Each runs the same `Authzura.Parity.Read` on both engines as a JWT.
 
 ## The gate
 
@@ -111,4 +123,5 @@ index names only: no session value, SQL text or bind value.
 inconclusive DB time does not fail). `--requests N` changes the requests
 per repetition, `--warmup N` the warm-up requests per engine, and
 `--no-compose` is passed on to the seed task. Failing
-and inconclusive targets are triaged in `bench/TRIAGE.md`.
+and inconclusive targets are triaged in
+[benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md).

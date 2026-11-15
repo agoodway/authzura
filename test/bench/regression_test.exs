@@ -1,6 +1,8 @@
 defmodule Authzura.Bench.RegressionTest do
   # The bench/TRIAGE.md regressions that need only the seeded :small
-  # benchmark database, not its Hasura: mix test --only bench test/bench
+  # benchmark database, not its Hasura:
+  # mix test --only bench test/bench/regression_test.exs
+  # (those that need the Hasura are in hasura_regression_test.exs)
   use ExUnit.Case, async: false
 
   alias Authzura.Bench
@@ -48,6 +50,35 @@ defmodule Authzura.Bench.RegressionTest do
     end
   end
 
+  describe "plans" do
+    # The selective relationship read must avoid a comments_pkey walk for
+    # every organization, with bound values and with a generic cached plan.
+    test "deep plans no primary-key walk for orgs 1..40 (custom and generic)" do
+      scenario = Scenarios.fetch!("input-rel-permission")
+
+      for org <- 1..40, regime <- [:custom, :generic] do
+        plan =
+          scenario
+          |> Scenarios.with_org(org)
+          |> Measure.authzura_sql()
+          |> Measure.raw_plan(regime)
+
+        refute Measure.pk_walk?(plan, "comments"), "org #{org} (#{regime}) walks comments_pkey"
+      end
+    end
+
+    # The unlifted control walks the key in both regimes; the helper must see it.
+    test "input-rel-broad-limit walks comments_pkey (custom and generic)" do
+      scenario = Scenarios.fetch!("input-rel-broad-limit")
+
+      for regime <- [:custom, :generic] do
+        plan = scenario |> Measure.authzura_sql(join_lift: false) |> Measure.raw_plan(regime)
+
+        assert Measure.pk_walk?(plan, "comments"), "#{regime} plan does not walk comments_pkey"
+      end
+    end
+  end
+
   describe "data statements" do
     for mode <- Bench.modes() do
       test "Authzura runs exactly 1 + L data statements per request (#{mode})" do
@@ -71,7 +102,7 @@ defmodule Authzura.Bench.RegressionTest do
   # Authzura's scans for scenario `id` with sequential scans priced out on
   # the one connection both the read and its EXPLAIN run on.
   defp indexable_scans(id) do
-    scenario = Enum.find(Scenarios.all(), &(&1.id == id))
+    scenario = Scenarios.fetch!(id)
 
     Repo.checkout(fn ->
       Repo.query!("SET enable_seqscan = off")

@@ -3,7 +3,7 @@ defmodule Authzura.Gen.Filter do
   Hasura `bool_exp` generators for `Authzura.Gen`, their size (`stats/1`)
   and the operator tags they exercise (`tags/2`).
 
-  A permission filter (`permission/1`) may use every accepted feature:
+  A permission filter (`permission/2`) may use every accepted feature:
   the comparison operators, `_in`/`_nin` (also `[]`), `_is_null`, the
   like, ilike, similar and regex families, the `jsonb` operators,
   `_and`/`_or` (also `[]`) and `_not`, `_exists`, relationships to depth
@@ -18,6 +18,8 @@ defmodule Authzura.Gen.Filter do
   import StreamData, except: [filter: 2, filter: 3]
 
   alias Authzura.Gen.Catalog
+
+  @nullable_relationships Catalog.nullable_relationships()
 
   @max_depth 6
   @max_nodes 40
@@ -133,10 +135,28 @@ defmodule Authzura.Gen.Filter do
   @spec input_operators() :: [atom()]
   def input_operators, do: @input_operators
 
-  @doc "A permission filter on `table`: `%{}` sometimes, else a full tree."
-  @spec permission(Catalog.table()) :: StreamData.t(t())
-  def permission(table),
-    do: frequency([{1, constant(%{})}, {7, bool_tree(permission_ctx(table, 0), @max_depth)}])
+  @doc """
+  A permission filter on `table`: `%{}` sometimes, else a full tree.
+  `join_lift: true` adds object-only chains and negated chains for the
+  join-lift property's coverage; the default distribution is unchanged.
+  """
+  @spec permission(Catalog.table(), keyword()) :: StreamData.t(t())
+  def permission(table, opts \\ []) do
+    ctx = permission_ctx(table, 0)
+
+    frequency(
+      [{1, constant(%{})}, {7, bool_tree(ctx, @max_depth)}] ++
+        permission_chains(ctx, Keyword.get(opts, :join_lift, false))
+    )
+  end
+
+  defp permission_chains(ctx, true) do
+    chains = object_chains(ctx)
+    fallbacks = for {_weight, chain} <- chains, do: {4, map(chain, &%{"_not" => &1})}
+    chains ++ fallbacks
+  end
+
+  defp permission_chains(_ctx, false), do: []
 
   @doc "A caller filter on `table` over the `visible` columns: often none."
   @spec input(Catalog.table(), [String.t()]) :: StreamData.t(t())
@@ -230,6 +250,43 @@ defmodule Authzura.Gen.Filter do
 
   defp relationship_tree({name, {_kind, target, _mapping}}, hops, depth),
     do: target |> permission_ctx(hops + 1) |> bool_tree(depth - 1) |> map(&%{name => &1})
+
+  # The unrestricted trees above retain arrays, OR/NOT and EXISTS for
+  # fallback coverage. This additional family keeps every hop liftable:
+  # fixture object mappings target integer primary keys, and the terminal
+  # leaf cannot introduce a non-liftable sibling. Prefer nullable mappings
+  # so sampling a permission batch gives several nullable lifted reads.
+  # permission/2 also draws negated copies, preserving fallback coverage
+  # even in batches whose unrestricted trees happen to have few arrays.
+  defp object_chains(%{table: table, hops: hops}) when hops < @max_hops do
+    choices =
+      for {_name, {:object, _target, _mapping}} = relationship <- Catalog.relationships(table),
+          do: {chain_weight(relationship), constant(relationship)}
+
+    object_chain(choices, hops)
+  end
+
+  defp object_chains(_ctx), do: []
+
+  defp object_chain([], _hops), do: []
+
+  defp object_chain(choices, hops) do
+    chain =
+      choices
+      |> frequency()
+      |> bind(fn {name, {:object, target, _mapping}} ->
+        ctx = permission_ctx(target, hops + 1)
+
+        [{1, leaf(ctx)} | object_chains(ctx)]
+        |> frequency()
+        |> map(&%{name => &1})
+      end)
+
+    [{8, chain}]
+  end
+
+  defp chain_weight({name, _relationship}) when name in @nullable_relationships, do: 4
+  defp chain_weight(_relationship), do: 1
 
   defp exists_trees(%{mode: :permission, hops: hops}, depth),
     do: [{1, bind(member_of(Catalog.tracked()), &exists_tree(&1, hops, depth))}]

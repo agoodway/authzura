@@ -60,7 +60,7 @@ defmodule Authzura.Scope do
           | {:unsupported_query, atom() | {:preload, String.t()}}
           | :root_field_disabled
 
-  @branch_bounds %{max_rows: nil, input: nil, pushdown: nil}
+  @branch_bounds %{max_rows: nil, input: nil, pushdown: nil, mode: :scope, join_lift: false}
 
   @typep target :: %{
            root: Table.table_ref(),
@@ -73,7 +73,8 @@ defmodule Authzura.Scope do
   @doc """
   Builds the plan. `opts` are per-call options validated by
   `Authzura.Options.call!/1`, plus the internal `mode: :scope | :execute`
-  (default `:scope`). An explicit `columns: []` is
+  (default `:scope`) and internal `join_lift: boolean()` (default `true`).
+  An explicit `columns: []` is
   `{:unsupported_query, :empty_columns}`, and a pinned limit or offset that
   is not a nonnegative integer is `{:unsupported_query, :limit | :offset}`.
 
@@ -109,6 +110,20 @@ defmodule Authzura.Scope do
   see outside the fence:
   `permission AND pushdown AND (CASE WHEN permission THEN input ELSE false END)`.
   `Authzura.Compiler.pushdown/3` admits only leakproof `_eq`/`_in` comparisons.
+
+  Only an input-bearing parent in `:execute` mode may lift its permission's
+  relationships, using `Compiler.lift_public/3` with a budget of
+  `max(Compiler.max_joins() - length(query.joins), 0)`. A complete lift adds
+  its joins before applying the condition, which stays both a positive
+  `WHERE` conjunct and the fence's `WHEN`. The estimate wrapper described in
+  [benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md)
+  adjusts planner selectivity with twenty identical integer values, without
+  changing the fence's truth value. The CASE still evaluates input only after
+  the permission succeeds; every lifted mapping equality remains rechecked.
+  Any remaining relationship or `_exists` makes the entire permission fall
+  back to its original `EXISTS` form, without the estimate wrapper.
+  `join_lift: false` gives the original SQL. Scope mode, reads without an
+  input, admin reads, preload statements and combination branches do not lift.
   """
   @spec build(Queryable.t(), Session.t(), Generation.t(), keyword()) ::
           {:ok, Plan.t()} | {:error, reason()}
@@ -504,7 +519,9 @@ defmodule Authzura.Scope do
     do: %{
       max_rows: Keyword.get(opts, :max_rows),
       input: Keyword.get(opts, :input_filter),
-      pushdown: Keyword.get(opts, :input_pushdown)
+      pushdown: Keyword.get(opts, :input_pushdown),
+      mode: Keyword.get(opts, :mode, :scope),
+      join_lift: Keyword.get(opts, :join_lift, true)
     }
 
   # `output` says how each filtered query (the parent and every branch) is
@@ -539,14 +556,14 @@ defmodule Authzura.Scope do
          %Query{from: from, limit: limit, offset: offset} = query,
          %{root: {prefix, _name}} = target,
          env,
-         %{max_rows: max_rows, input: input, pushdown: pushdown},
+         %{max_rows: max_rows, input: input} = bounds,
          output
        ) do
     {query, binding} = root_alias(%{query | from: %{from | prefix: prefix}})
 
     with {:ok, caller_limit} <- bound(limit, :limit),
          {:ok, _offset} <- bound(offset, :offset),
-         {:ok, query} <- filter(query, binding, target, env, input, pushdown) do
+         {:ok, query} <- filter(query, binding, target, env, input, bounds) do
       {:ok, finish(query, binding, caller_limit, max_rows, output)}
     end
   end
@@ -566,8 +583,8 @@ defmodule Authzura.Scope do
 
   defp root_alias(%Query{from: %FromExpr{as: binding}} = query), do: {query, binding}
 
-  defp filter(query, _binding, %{admin?: true}, _env, input, _pushdown),
-    do: {:ok, gated(query, nil, input, nil)}
+  defp filter(query, _binding, %{admin?: true}, _env, input, _bounds),
+    do: {:ok, gated(query, nil, input, %{pushdown: nil, estimate?: false})}
 
   defp filter(
          query,
@@ -575,13 +592,24 @@ defmodule Authzura.Scope do
          %{table: table, permission: %Permission{filter: ast}},
          {session, %Generation{snapshot: %Snapshot{tables: tables}, config: %{adapter: adapter}}},
          input,
-         pushdown
+         %{pushdown: pushdown} = bounds
        ) do
     ctx = %{Compiler.root_ctx(table, tables, session, adapter, :permission) | binding: binding}
 
-    with {:ok, condition} <- Compiler.compile_public(ast, ctx),
-         do: {:ok, gated(query, condition, input, pushdown)}
+    with {:ok, %{condition: condition} = lifted} <-
+           Compiler.lift_public(ast, ctx, lift_budget(query, input, bounds)) do
+      query = Compiler.apply_joins(query, lifted)
+      options = %{pushdown: pushdown, estimate?: match?(%{joins: [_ | _]}, lifted)}
+      {:ok, gated(query, condition, input, options)}
+    end
   end
+
+  defp lift_budget(_query, nil, _bounds), do: 0
+
+  defp lift_budget(%Query{joins: joins}, _input, %{mode: :execute, join_lift: true}),
+    do: max(Compiler.max_joins() - length(joins), 0)
+
+  defp lift_budget(_query, _input, _bounds), do: 0
 
   # The input filter is evaluated only on rows the permission admits: SQL
   # leaves the order of `AND` operands to the planner, but a `CASE` fixes
@@ -593,17 +621,31 @@ defmodule Authzura.Scope do
   # leakproof, from `Authzura.Compiler.pushdown/3`) is one more conjunct
   # outside the fence, so the planner can use an index on it. The fence
   # still holds the whole input.
-  defp gated(query, nil, nil, _pushdown), do: query
-  defp gated(query, nil, input, _pushdown), do: where(query, ^input)
-  defp gated(query, permission, nil, _pushdown), do: where(query, ^permission)
+  defp gated(query, nil, nil, _options), do: query
+  defp gated(query, nil, input, _options), do: where(query, ^input)
+  defp gated(query, permission, nil, _options), do: where(query, ^permission)
 
-  defp gated(query, permission, input, nil),
-    do: where(query, ^dynamic(^permission and ^fenced(permission, input)))
+  defp gated(query, permission, input, %{pushdown: nil, estimate?: estimate?}),
+    do: where(query, ^dynamic(^permission and ^fence_for(permission, input, estimate?)))
 
-  defp gated(query, permission, input, pushdown),
-    do: where(query, ^dynamic(^permission and ^pushdown and ^fenced(permission, input)))
+  defp gated(query, permission, input, %{pushdown: pushdown, estimate?: estimate?}),
+    do:
+      where(
+        query,
+        ^dynamic(^permission and ^pushdown and ^fence_for(permission, input, estimate?))
+      )
 
-  defp fenced(permission, input),
+  # Only complete lifts on fenced execute reads get the estimate; the CASE stays.
+  defp fence_for(permission, input, true),
+    do: permission |> fence(input) |> estimated()
+
+  defp fence_for(permission, input, false), do: fence(permission, input)
+
+  # Twenty identical elements adjust the planner estimate without changing truth.
+  @estimate_fragment "(?)::int = ANY('{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}'::int[])"
+  defp estimated(fence), do: dynamic(fragment(@estimate_fragment, ^fence))
+
+  defp fence(permission, input),
     do: dynamic(fragment("CASE WHEN ? THEN ? ELSE false END", ^permission, ^input))
 
   # The caller's limit or offset value. Literals were checked by `QueryShape`;

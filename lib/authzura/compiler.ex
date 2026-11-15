@@ -22,6 +22,10 @@ defmodule Authzura.Compiler do
       column (plain `=` and `<>`), which is what Hasura's null-aware form
       evaluates to for a non-null value.
     * `{:and, []}` is `true` and `{:or, []}` is `false`.
+    * `lift/3` compiles a root filter with its `_and` chains of object
+      relationships onto a strictly unique primary key as inner joins
+      instead of `EXISTS`, and gives `compile/2`'s output, unchanged, when
+      nothing lifts. `apply_joins/2` adds those joins to the root query.
 
   Errors are returned, never raised:
 
@@ -44,7 +48,7 @@ defmodule Authzura.Compiler do
   it is never executed.
   """
 
-  import Ecto.Query, only: [dynamic: 1, from: 2, subquery: 1]
+  import Ecto.Query, only: [dynamic: 1, from: 2, join: 5, subquery: 1]
 
   alias Authzura.{Adapter, AST, Session}
   alias Authzura.Compiler.Aliases
@@ -72,6 +76,11 @@ defmodule Authzura.Compiler do
           | {:unsupported_type, String.t()}
           | :too_deep
           | :invalid_filter
+
+  @type public_reason ::
+          :forbidden
+          | {:missing_session_variable, String.t()}
+          | {:invalid_session_value, String.t(), term()}
 
   @max_depth Aliases.max_index()
 
@@ -114,10 +123,7 @@ defmodule Authzura.Compiler do
       iex> Authzura.Compiler.public_reason(:too_deep)
       :forbidden
   """
-  @spec public_reason(reason()) ::
-          :forbidden
-          | {:missing_session_variable, String.t()}
-          | {:invalid_session_value, String.t(), term()}
+  @spec public_reason(reason()) :: public_reason()
   def public_reason({:missing_session_variable, _name} = reason), do: reason
   def public_reason({:invalid_session_value, _name, _detail} = reason), do: reason
   def public_reason(_internal), do: :forbidden
@@ -126,14 +132,204 @@ defmodule Authzura.Compiler do
   Compiles `ast` like `compile/2`, returning only public reasons
   (`public_reason/1`).
   """
-  @spec compile_public(AST.t(), ctx()) ::
-          {:ok, Query.dynamic_expr()}
-          | {:error,
-             :forbidden
-             | {:missing_session_variable, String.t()}
-             | {:invalid_session_value, String.t(), term()}}
+  @spec compile_public(AST.t(), ctx()) :: {:ok, Query.dynamic_expr()} | {:error, public_reason()}
   def compile_public(ast, ctx),
     do: with({:error, reason} <- compile(ast, ctx), do: {:error, public_reason(reason)})
+
+  @typedoc "An inner join a lift adds: the target, its alias and its `ON` mapping equalities."
+  @type join :: %{source: Table.table_ref(), binding: atom(), on: Query.dynamic_expr()}
+
+  @typedoc "A lifted filter: its joins, in the order they must be applied, and its condition."
+  @type lifted :: %{joins: [join()], condition: Query.dynamic_expr()}
+
+  # One join under `join_collapse_limit` 8.
+  @max_joins 7
+
+  if @max_joins > Aliases.max_index(), do: raise("join limit exceeds the alias pool")
+
+  @doc "The maximum total number of joins permitted on a lifted read."
+  @spec max_joins() :: pos_integer()
+  def max_joins, do: @max_joins
+
+  @doc """
+  Compiles the root filter `ast` like `compile/2`, with its liftable
+  relationship nodes as inner joins instead of `EXISTS` subqueries.
+
+  A `{:relationship, name, e}` node lifts when all of these hold:
+
+    1. It is reached through `_and` only: never under `_or` or `_not`, and
+       never inside an `EXISTS` that did not lift (an `_exists`, or a
+       relationship that did not lift).
+    2. It is an `:object` relationship.
+    3. Its target is a table with a strictly unique key (`Table.strict_key?/1`),
+       and the mapping's remote columns are exactly the whole primary key (a
+       temporal key is unique only on all its columns, the range included).
+    4. Every mapping pair is certified by the optional adapter callback
+       `c:Authzura.Adapter.lossless_join_pair?/2` (absent means no lift).
+       Postgres compares without lossy coercion when both columns are in
+       the integer family (`Column.integer_kinds/0`), or both have the same
+       type of a collation-free kind (`float8`, `numeric`, `uuid`, an enum,
+       the timestamp and date types or `boolean`). Domains count as their
+       base type. A `float8` against a `bigint` key keeps its `EXISTS` (the
+       float `9007199254740992` equals both `9007199254740992` and
+       `9007199254740993`), and so do `text`, `varchar`, `bpchar` and
+       `citext` pairs, whose equality follows a collation introspection does
+       not see.
+    5. The statement stays within the limits: at most `budget` and at most #{@max_joins}
+       lifted nodes, and every alias within `Aliases.max_index/0`. Over
+       either limit nothing in the statement lifts.
+
+  Lifted node `i` (1-based, in tree order) joins its target as
+  `Aliases.at(i)`, `ON` the mapping equalities against its parent's alias,
+  and contributes `ON AND e'` to the condition, `e'` being `e` compiled
+  against the joined alias with its own children lifted by the same rules.
+  So the condition re-checks every `ON` equality. If any node requires
+  `EXISTS`, the whole filter falls back. Every join has its own alias, so
+  siblings on one relationship are two joins. An inner join drops a row whose mapping
+  is `NULL` or dangling, as the `EXISTS` does, and the key matches at most
+  one target row, so no row repeats.
+
+  **Fallback.** When nothing lifts, `joins` is `[]` and `condition` is
+  exactly `compile/2`'s output. A lifted compile that fails also falls back,
+  so every error is `compile/2`'s own. `ctx` must be a root context
+  (`root_ctx/5`); any other compiles unlifted.
+
+  Lifting is all-or-nothing: if any relationship or `_exists` remains,
+  the whole filter uses `compile/2` unchanged.
+
+  The joins must be added to the root query (`apply_joins/2`) before the
+  condition is applied, since the condition names their aliases.
+  The condition must remain a positive `WHERE` conjunct of that joined
+  query. Do not negate it or use it as a standalone per-row boolean.
+  The estimate wrapper (see "Relationship fence: estimate wrapper" in
+  [benchmark triage](https://github.com/agoodway/authzura/blob/main/bench/TRIAGE.md)) permits exactly one additional use: a complete lift on
+  a fenced `all_input/4` read may repeat it as the `WHEN` of the wrapper's
+  `CASE`, with every join in that same statement. The `WHEN` re-checks every
+  mapping equality and target condition against those joined rows, so true
+  implies the original permission. Keep the positive `WHERE` conjunct too;
+  the wrapper must preserve `CASE WHEN permission THEN input ELSE false END`.
+  """
+  @spec lift(AST.t(), ctx(), non_neg_integer()) :: {:ok, lifted()} | {:error, reason()}
+  def lift(ast, ctx, 0), do: unlifted(ast, ctx)
+
+  def lift(ast, %{depth: 0} = ctx, budget)
+      when is_integer(budget) and budget > 0 do
+    with count when count > 0 and count <= budget and count <= @max_joins <-
+           liftable(ast, ctx),
+         {:ok, condition, %{joins: joins, complete?: true}} <-
+           lifted(ast, ctx, %{next: 1, joins: [], complete?: true}) do
+      {:ok, %{joins: Enum.reverse(joins), condition: condition}}
+    else
+      _nothing_lifts -> unlifted(ast, ctx)
+    end
+  end
+
+  def lift(ast, ctx, _budget), do: unlifted(ast, ctx)
+
+  @doc """
+  Lifts `ast` like `lift/3`, returning only public reasons
+  (`public_reason/1`).
+  """
+  @spec lift_public(AST.t(), ctx(), non_neg_integer()) ::
+          {:ok, lifted()} | {:error, public_reason()}
+  def lift_public(ast, ctx, budget),
+    do: with({:error, reason} <- lift(ast, ctx, budget), do: {:error, public_reason(reason)})
+
+  @doc """
+  Adds the joins of `lifted` (from `lift/3`) to `query`, in order, as inner
+  joins on each target's explicit prefix. Apply them before the condition.
+  """
+  @spec apply_joins(Query.t(), lifted()) :: Query.t()
+  def apply_joins(%Query{} = query, %{joins: joins}),
+    do: Enum.reduce(joins, query, &inner_join/2)
+
+  defp inner_join(%{source: {schema, name}, binding: binding, on: on}, query),
+    do: join(query, :inner, [], t in ^name, prefix: ^schema, as: ^binding, on: ^on)
+
+  defp unlifted(ast, ctx) do
+    with {:ok, condition} <- compile(ast, ctx),
+         do: {:ok, %{joins: [], condition: condition}}
+  end
+
+  # The number of nodes of `ast` that lift (rules 1 to 4), in tree order.
+  defp liftable({:and, children}, ctx) when is_list(children),
+    do: Enum.reduce(children, 0, &(liftable(&1, ctx) + &2))
+
+  defp liftable({:relationship, name, child}, ctx) do
+    case lift_target(ctx, name) do
+      {:ok, _relationship, target} -> 1 + liftable(child, %{ctx | table: target})
+      :error -> 0
+    end
+  end
+
+  defp liftable(_node, _ctx), do: 0
+
+  # Compiles a lifted level, threading the next alias index and the joins
+  # (latest first). It walks the tree exactly as `liftable/2` counts it.
+  defp lifted({:and, [_ | _] = children}, ctx, acc),
+    do: combine(children, acc, &lifted(&1, ctx, &2), &both/2)
+
+  defp lifted({:relationship, name, _child} = node, ctx, acc) do
+    ctx |> lift_target(name) |> lift_relationship(node, ctx, acc)
+  end
+
+  defp lifted(node, ctx, %{complete?: complete?} = acc) do
+    with {:ok, condition, acc} <- compiled(node, ctx, acc),
+         do: {:ok, condition, %{acc | complete?: complete? and AST.binding_depth(node) == 0}}
+  end
+
+  defp lift_relationship(:error, node, ctx, acc),
+    do: compiled(node, ctx, %{acc | complete?: false})
+
+  defp lift_relationship(
+         {:ok, %Relationship{target: ref, mapping: mapping}, target},
+         {:relationship, _name, child},
+         %{binding: parent} = ctx,
+         %{next: index, joins: joins} = acc
+       ) do
+    binding = Aliases.at(index)
+    on = correlation(mapping, {:as, parent}, binding)
+    lifted_join = %{source: ref, binding: binding, on: on}
+    inner = %{ctx | table: target, binding: binding}
+
+    with {:ok, condition, acc} <-
+           lifted(child, inner, %{acc | next: index + 1, joins: [lifted_join | joins]}) do
+      {:ok, dynamic(^on and ^condition), acc}
+    end
+  end
+
+  defp compiled(node, ctx, acc),
+    do: with({:ok, condition} <- compile(node, ctx), do: {:ok, condition, acc})
+
+  # The relationship `name` of `table` and its target, when rules 2 to 4 hold.
+  defp lift_target(
+         %{table: %Table{columns: columns} = table, tables: tables, adapter: adapter},
+         name
+       ) do
+    with {:ok, %Relationship{kind: :object, target: ref, mapping: mapping} = rel} <-
+           fetch_relationship(table, name),
+         {:ok, %Table{kind: :table, primary_key: key, columns: remote_columns} = target} <-
+           Table.fetch(tables, ref),
+         true <- Table.strict_key?(target),
+         true <- whole_key?(mapping, key),
+         true <- lossless_mapping?(mapping, columns, remote_columns, adapter) do
+      {:ok, rel, target}
+    else
+      _not_liftable -> :error
+    end
+  end
+
+  defp whole_key?(mapping, key) do
+    remote = Enum.map(mapping, fn {_local, remote} -> remote end)
+    Enum.sort(remote) == Enum.sort(key)
+  end
+
+  defp lossless_mapping?(mapping, columns, remote_columns, adapter) do
+    implements?(adapter, :lossless_join_pair?, 2) and
+      Enum.all?(mapping, fn {local, remote} ->
+        adapter.lossless_join_pair?(columns[local], remote_columns[remote])
+      end)
+  end
 
   @doc """
   Whether `ast`, compiled against `table`, compares any enum column, through
@@ -191,7 +387,7 @@ defmodule Authzura.Compiler do
 
   # `c:Authzura.Adapter.index_pushdown?/2` is optional: no callback, no push-down.
   defp pushdown?(adapter),
-    do: Code.ensure_loaded?(adapter) and function_exported?(adapter, :index_pushdown?, 2)
+    do: implements?(adapter, :index_pushdown?, 2)
 
   defp hoistable?({:compare, _name, :in, {:literal, values}}, _table, _adapter)
        when length(values) > @max_pushdown_list,
@@ -211,6 +407,11 @@ defmodule Authzura.Compiler do
 
   defp hoistable?(_node, _table, _adapter), do: false
 
+  defp implements?(module, name, arity),
+    do: Code.ensure_loaded?(module) and function_exported?(module, name, arity)
+
+  defp both(left, right), do: dynamic(^left and ^right)
+
   @doc """
   Compiles `ast` against `ctx.table`. See the moduledoc.
   """
@@ -219,10 +420,10 @@ defmodule Authzura.Compiler do
   def compile({:or, []}, _ctx), do: {:ok, dynamic(false)}
 
   def compile({:and, children}, ctx) when is_list(children),
-    do: combine(children, ctx, fn left, right -> dynamic(^left and ^right) end)
+    do: compile_group(children, ctx, &both/2)
 
   def compile({:or, children}, ctx) when is_list(children),
-    do: combine(children, ctx, fn left, right -> dynamic(^left or ^right) end)
+    do: compile_group(children, ctx, fn left, right -> dynamic(^left or ^right) end)
 
   def compile({:not, child}, ctx) do
     with {:ok, condition} <- compile(child, ctx), do: {:ok, dynamic(not (^condition))}
@@ -243,7 +444,8 @@ defmodule Authzura.Compiler do
     with {:ok, %Relationship{target: ref, mapping: mapping}} <- fetch_relationship(table, name),
          {:ok, %{binding: binding} = inner} <- descend(ctx, ref),
          {:ok, condition} <- compile(child, inner) do
-      {:ok, exists(inner, dynamic(^correlation(mapping, parent, binding) and ^condition))}
+      on = correlation(mapping, {:parent_as, parent}, binding)
+      {:ok, exists(inner, dynamic(^on and ^condition))}
     end
   end
 
@@ -256,12 +458,26 @@ defmodule Authzura.Compiler do
 
   def compile(_node, _ctx), do: {:error, :invalid_filter}
 
-  defp combine(children, ctx, join),
-    do: Enum.reduce_while(children, nil, &(&1 |> compile(ctx) |> joined(&2, join)))
+  defp compile_group(children, ctx, combine_with) do
+    with {:ok, condition, nil} <- combine(children, nil, &compiled(&1, ctx, &2), combine_with),
+         do: {:ok, condition}
+  end
 
-  defp joined({:ok, condition}, nil, _join), do: {:cont, {:ok, condition}}
-  defp joined({:ok, condition}, {:ok, acc}, join), do: {:cont, {:ok, join.(acc, condition)}}
-  defp joined(error, _acc, _join), do: {:halt, error}
+  # Folds the non-empty `children` left to right: `step` compiles a child
+  # against a state it threads (`nil` in `compile/2`, the lift accumulator
+  # in `lift/3`), and `combine_with` combines the conditions.
+  defp combine(children, state, step, combine_with) do
+    Enum.reduce_while(children, {:ok, nil, state}, fn child, {:ok, left, state} ->
+      child |> step.(state) |> joined(left, combine_with)
+    end)
+  end
+
+  defp joined({:ok, condition, state}, nil, _combine_with), do: {:cont, {:ok, condition, state}}
+
+  defp joined({:ok, condition, state}, left, combine_with),
+    do: {:cont, {:ok, combine_with.(left, condition), state}}
+
+  defp joined(error, _left, _combine_with), do: {:halt, error}
 
   # Looks `key` up in `map` (which may be anything), or returns `{:error, error}`.
   defp fetch(map, key, error) do
@@ -365,14 +581,20 @@ defmodule Authzura.Compiler do
          do: {:ok, %{ctx | table: target, binding: Aliases.at(depth + 1), depth: depth + 1}}
   end
 
+  # The mapping equalities `remote = local`. The local side is named through
+  # `parent_as/1` for an `EXISTS` correlated to an outer binding, or `as/1`
+  # for a join at the same query level.
   defp correlation([{local, remote} | rest], parent, binding) do
     Enum.reduce(rest, pair(local, remote, parent, binding), fn {local, remote}, acc ->
       dynamic(^acc and ^pair(local, remote, parent, binding))
     end)
   end
 
-  defp pair(local, remote, parent, binding),
+  defp pair(local, remote, {:parent_as, parent}, binding),
     do: dynamic(field(as(^binding), ^remote) == field(parent_as(^parent), ^local))
+
+  defp pair(local, remote, {:as, parent}, binding),
+    do: dynamic(field(as(^binding), ^remote) == field(as(^parent), ^local))
 
   defp exists(%{table: %Table{schema: schema, name: name}, binding: binding}, condition) do
     sub = from(t in name, prefix: ^schema, as: ^binding, where: ^condition, select: 1)

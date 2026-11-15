@@ -44,15 +44,7 @@ defmodule Authzura.Integration.StaleTypesTest do
       %{
         table: {"public", owners},
         array_relationships: [
-          %{
-            name: "moods",
-            using: %{
-              manual_configuration: %{
-                remote_table: {"public", moods},
-                column_mapping: %{mood: "mood"}
-              }
-            }
-          }
+          HasuraFixture.array_relationship("moods", {"public", moods}, %{mood: "mood"})
         ],
         select_permissions: HasuraFixture.select_permissions("user", "*")
       },

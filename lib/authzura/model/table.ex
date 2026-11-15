@@ -9,6 +9,15 @@ defmodule Authzura.Model.Table do
   out, and so are indexes on a non-default operator class or collation. The
   preload loader uses it to decide whether a limited level can read each
   parent through an index range.
+
+  `strict_key?` defaults to false. It is true when the table has a primary
+  key that is strictly unique: not deferrable, backed by a valid index, and
+  the table has no inheritance children. A partitioned table qualifies while
+  its key index is valid (the key is then enforced across the partitions; an
+  `ALTER TABLE ONLY` on the parent leaves it invalid and duplicates possible).
+  A key that is not strict can repeat within a
+  statement or across children, so a relationship chain through it must not
+  be compiled as joins.
   """
 
   alias Authzura.Model.{Column, Relationship}
@@ -26,7 +35,8 @@ defmodule Authzura.Model.Table do
     columns: %{},
     primary_key: [],
     indexes: [],
-    relationships: %{}
+    relationships: %{},
+    strict_key?: false
   ]
 
   @type table_ref :: {schema :: String.t(), name :: String.t()}
@@ -38,8 +48,13 @@ defmodule Authzura.Model.Table do
           columns: %{String.t() => Column.t()},
           primary_key: [String.t()],
           indexes: [[{String.t(), :asc | :asc_nulls_first | :desc | :desc_nulls_last}]],
-          relationships: %{String.t() => Relationship.t()}
+          relationships: %{String.t() => Relationship.t()},
+          strict_key?: boolean()
         }
+
+  @doc "Whether the table's primary key is strictly unique within a statement."
+  @spec strict_key?(t()) :: boolean()
+  def strict_key?(%__MODULE__{strict_key?: strict?}), do: strict?
 
   @doc "Returns the `{schema, name}` reference of a table."
   @spec ref(t()) :: table_ref()

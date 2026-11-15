@@ -37,10 +37,7 @@ defmodule Authzura.Integration.PreloadLoaderTest do
   defp self_relationship(name, column) do
     mapping = %{column => column}
 
-    %{
-      name: name,
-      using: %{manual_configuration: %{remote_table: @articles, column_mapping: mapping}}
-    }
+    HasuraFixture.array_relationship(name, @articles, mapping)
   end
 
   defp metadata do
@@ -70,18 +67,8 @@ defmodule Authzura.Integration.PreloadLoaderTest do
       %{
         table: @users,
         object_relationships: [
-          %{
-            name: "profile",
-            using: %{
-              manual_configuration: %{remote_table: @profiles, column_mapping: %{id: "user_id"}}
-            }
-          },
-          %{
-            name: "same_email",
-            using: %{
-              manual_configuration: %{remote_table: @users, column_mapping: %{email: "email"}}
-            }
-          }
+          HasuraFixture.object_relationship("profile", @profiles, %{id: "user_id"}),
+          HasuraFixture.object_relationship("same_email", @users, %{email: "email"})
         ],
         select_permissions: permissions(["id", "email"])
       },
@@ -89,15 +76,10 @@ defmodule Authzura.Integration.PreloadLoaderTest do
       %{
         table: @memberships,
         array_relationships: [
-          %{
-            name: "notes",
-            using: %{
-              manual_configuration: %{
-                remote_table: @notes,
-                column_mapping: %{org_id: "org_id", user_id: "user_id"}
-              }
-            }
-          }
+          HasuraFixture.array_relationship("notes", @notes, %{
+            org_id: "org_id",
+            user_id: "user_id"
+          })
         ],
         select_permissions: permissions(["org_id", "user_id", "level"])
       },
@@ -113,12 +95,7 @@ defmodule Authzura.Integration.PreloadLoaderTest do
       %{
         table: @key_kinds,
         object_relationships: [
-          %{
-            name: "user",
-            using: %{
-              manual_configuration: %{remote_table: @users, column_mapping: %{code: "email"}}
-            }
-          }
+          HasuraFixture.object_relationship("user", @users, %{code: "email"})
         ],
         select_permissions: permissions(["id", "code"])
       }
