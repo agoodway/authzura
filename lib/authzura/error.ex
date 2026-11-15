@@ -26,7 +26,7 @@ defmodule Authzura.Error do
   | Reason | Kind | Meaning |
   |---|---|---|
   | `:forbidden` | denial | No select permission for the role on the root table (or on a preloaded relationship's target), a relationship the role may not follow (undeclared, remote, not preloadable), or a table Authzura does not track. Unknown and forbidden look the same on purpose. |
-  | `:root_field_disabled` | denial | The permission exists, but its `root_fields` do not enable this read (`select`, or `select_by_pk` for `Authzura.get/4`). |
+  | `:root_field_disabled` | denial | The permission exists, but its `root_fields` do not enable this read (`select`, or `select_by_pk` for `Authzura.get/4`, or `select_aggregate` for a root aggregate). |
   | `{:forbidden_columns, [column]}` | denial | The request names columns the role may not select: from `columns:`, an input filter, `order_by`, or a virtual or unknown schema field. Names are column strings. |
   | `{:missing_session_variable, name}` | bad input | The role's row filter uses `X-Hasura-*` variable `name` and the session lacks it. |
   | `{:invalid_session_value, name, reason}` | bad input | The session variable `name` does not cast to the column's type. |

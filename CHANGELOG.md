@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Authzura.Scope.root_field/2` checks `:select_aggregate`: a root aggregate
+  read needs `select_aggregate` in the permission's `root_fields`.
+- The PgRest example (test only) is a single `authorize_query/5` built on
+  `Authzura.filter_rows/3`, against PgRest pinned from GitHub, and now runs in
+  CI. Resources must set `@schema_prefix` to the instance's `default_prefix`.
 - Optional `c:Authzura.Adapter.lossless_join_pair?/2` callback (absent: no
   join-lift) and `Authzura.Model.Table.strict_key?` for strictly unique keys.
 - Bench scenarios `input-rel-broad-limit` and `input-col-broad-limit`, role

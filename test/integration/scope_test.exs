@@ -3,7 +3,7 @@ defmodule Authzura.Integration.ScopeTest do
 
   import Authzura.SqlHelper
 
-  alias Authzura.{Error, HasuraFixture, TelemetryHelper}
+  alias Authzura.{Error, HasuraFixture, Scope, TelemetryHelper}
   alias Authzura.Model.Permission
   alias Authzura.Test.Schemas.{Article, AuditUser, User}
   alias Ecto.Adapters.SQL
@@ -273,6 +273,19 @@ defmodule Authzura.Integration.ScopeTest do
   end
 
   describe "root fields and limits" do
+    test "a root aggregate requires select_aggregate or all root fields" do
+      permission = %Permission{role: "user", table: @articles, operation: :select}
+
+      for fields <- [:all, [:select_aggregate], [:select, :select_aggregate]] do
+        assert Scope.root_field(%{permission | root_fields: fields}, :select_aggregate) == :ok
+      end
+
+      for fields <- [[], [:select], [:select_by_pk]] do
+        assert Scope.root_field(%{permission | root_fields: fields}, :select_aggregate) ==
+                 {:error, :root_field_disabled}
+      end
+    end
+
     test "a table without the select root field is disabled", %{instance: i} do
       assert Authzura.scope(Article, HasuraFixture.session!("noroot"), instance: i) ==
                {:error, :root_field_disabled}

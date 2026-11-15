@@ -285,10 +285,11 @@ defmodule Authzura.Scope do
   Checks that `permission` exposes the root field a read needs: `:ok`, or
   `{:error, :root_field_disabled}`. A list or single-row read (`:select`,
   the default) needs `select`; a read by primary key (`:select_by_pk`, for
-  `Authzura.get/4`) needs `select_by_pk` or `select`. The admin role's
-  synthesized permission keeps the default `root_fields: :all`.
+  `Authzura.get/4`) needs `select_by_pk` or `select`; a root aggregate read
+  (`:select_aggregate`) needs `select_aggregate`. The admin role's synthesized
+  permission keeps the default `root_fields: :all`.
   """
-  @spec root_field(Permission.t(), :select | :select_by_pk) ::
+  @spec root_field(Permission.t(), :select | :select_by_pk | :select_aggregate) ::
           :ok | {:error, :root_field_disabled}
   def root_field(permission, read \\ :select)
 
@@ -299,6 +300,9 @@ defmodule Authzura.Scope do
 
   def root_field(%Permission{root_fields: fields}, :select_by_pk) when is_list(fields),
     do: select_enabled(:select in fields or :select_by_pk in fields)
+
+  def root_field(%Permission{root_fields: fields}, :select_aggregate) when is_list(fields),
+    do: select_enabled(:select_aggregate in fields)
 
   defp select_enabled(true), do: :ok
   defp select_enabled(false), do: {:error, :root_field_disabled}

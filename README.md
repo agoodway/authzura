@@ -119,6 +119,9 @@ The test database is built from `priv/test_migrations` by `mix test`; Authzura
 adds no tables to your application. Every Elixir example in this README and
 the guides is run by `test/readme_examples_test.exs`.
 
+The PgRest examples run by default using the pinned GitHub test dependency;
+see [Using with PgRest](docs/guides/querying.md#using-with-pgrest).
+
 The opt-in `mix authzura.check` host-project test: `mix test --only host_app`.
 
 The opt-in Hasura parity suite: [Running parity tests](docs/guides/security.md#running-parity-tests).

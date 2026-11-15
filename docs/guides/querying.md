@@ -354,7 +354,7 @@ Expected denials are `{:error, reason}`; the `!` variants raise
 | `{:invalid_session, kind, detail}` | `Authzura.Session.new/2` could not resolve a role |
 | `{:unsupported_query, reason}` | The query uses something Authzura does not enforce |
 | `{:invalid_input, reason}` | A malformed input request |
-| `:root_field_disabled` | The permission disables the select root field (for `get/4`, both `select` and `select_by_pk`) |
+| `:root_field_disabled` | The permission disables the required root field: `select` (for `get/4`, both `select` and `select_by_pk`), or `select_aggregate` for a root aggregate |
 | `:stale_permissions` | The generation is older than `max_staleness`, or an enum label or type it was loaded with has changed since (the next poll reloads) |
 | `{:unsupported_column_type, column}` | The repo cannot decode a selected column's type (`{:type, name}` when the type is no selected column's) |
 | `:not_ready` | No generation is published yet |
@@ -365,57 +365,39 @@ Expected denials are `{:error, reason}`; the `!` variants raise
 ## Using with PgRest
 
 [PgRest](https://github.com/agoodway/pgrest) serves Ecto schemas as a
-PostgREST-compatible API. Authzura plugs into its extension points; a
-runnable example lives in `test/pgrest_examples` and
-`test/support/pgrest_example.ex`. Those tests are tagged `:pgrest` and run
-only when a PgRest checkout sits next to this repository, in a sibling
-directory named `pgrest`; otherwise `mix test` skips them.
+PostgREST-compatible API. A runnable, test-only adapter lives in
+`test/support/pgrest_example.ex` with scenarios in `test/pgrest_examples`.
+PgRest is a pinned GitHub test dependency; the examples run with `mix test`.
 
-- **Session.** A plug in front of `PgRest.Plug` builds the `Authzura.Session`
-  (from a verified JWT, see [Sessions and JWT](#sessions-and-jwt)) and a
-  `context_builder` puts it in the PgRest context.
-- **Rows.** A resource's `scope/2` takes the row filter from
-  `Authzura.filter_rows/3` (see [`filter_rows`](#filter_rows)). PgRest accepts
-  only `where`, `join` and `distinct` from `scope/2`, and `filter_rows/3` adds
-  nothing else to the query PgRest gave you. PgRest scopes embedded resources
-  through their own `scope/2`, so the embedded table's permission applies too.
-- **Columns.** PgRest's `readable:` is fixed per resource, not per role. In
-  `after_load/2`, keep only the columns `Authzura.allowed_columns/3` lists
-  (plus the embeds); everything else, including select aliases, is dropped.
-- **Gate.** `scope/2` cannot deny a request, so a `PgRest.Authorization`
-  module decides first. For the root and every embedded resource it calls
-  `Authzura.filter_rows/3` and refuses on any error (no permission, a missing
-  session variable) and on a permission with a `limit`, which `scope/2`
-  cannot express. Refuse such requests rather than raise from `scope/2`.
+- **Session.** The endpoint builds an `Authzura.Session` from verified session
+  variables and puts `%{authz: %{instance: instance, session: session}}` into
+  PgRest's `context_builder`. PgRest adds `path` (embed output names) and
+  `root?` for each resource, preserving the Authzura state.
+- **Rows.** The gate implements only `authorize_query/5`. For `:read`, it
+  calls `Authzura.filter_rows/3` on PgRest's query and returns the filtered
+  query with the permission options. Authzura errors deny the request.
+  Each embedded resource is authorized independently, including aliased
+  and nested paths.
+- **Prefixes.** Resources must set `@schema_prefix` to the instance's
+  `default_prefix`: `filter_rows/3` pins the root prefix, and PgRest rejects
+  a hook query that changes the base scope's prefix.
+- **Columns.** The returned `columns:` option carries the permission's physical
+  column names. PgRest narrows stars to permitted columns and refuses explicit
+  hidden columns in selects, filters and ordering with `42501` (403 for an
+  authenticated session). Aliases of permitted columns are preserved.
+- **Limits.** The returned `limit:` option caps rows per parent, including
+  embedded collections, and clamps larger requested limits.
+- **Aggregates and counts.** Both options require the permission's
+  `allow_aggregations` flag and are denied by default. Root requests also
+  require `select_aggregate` in `root_fields` (or `root_fields: :all`);
+  nested aggregates need only the flag. The endpoint enables PgRest's
+  aggregate support so the permission decides access.
+- **Other operations.** Creates, updates, deletes and execution plans return
+  `{:error, :unsupported}`. Plans are refused even though the example endpoint
+  enables plan requests; they can expose bound values.
 
-What the gate checks, and what it does not:
+The resources need no authorization `scope/2` or `after_load/2` callbacks,
+and the adapter does not parse PgRest's request AST. Nothing in `lib/` depends
+on PgRest, and the adapter adds no public Authzura API.
 
-- On the root it reads every column the request names with PgRest's own
-  grammar (`PgRest.Grammar.Select` and `PgRest.Planner.Params`): select
-  items with aliases, casts, JSON paths and aggregates, filters with `not`,
-  `or` and `and` groups, and `order` terms, for the root and each embed at
-  any depth, and refuses the request when the role may not read one of them
-  (`Authzura.validate_columns/4`). Without this, a filter, `order` or alias on
-  a hidden column would reveal its values even though the column is never
-  returned.
-- It fails closed: a query string PgRest's grammar rejects, an embed that is
-  not an Ecto association of its parent (explicit `relationships:` are not
-  followed), or parameters for an embed the select does not contain are
-  refused.
-- It follows PgRest's grammar by calling it, so it must be kept in step with
-  the PgRest version. PgRest does not yet pass per-resource column lists to
-  its authorization hook, which is why the gate parses the request itself.
-- `*` names every column of its resource, spread embeds (`...rel(*)`) included,
-  and is refused where the role has a hidden column: name the columns
-  explicitly (`select=id,title`). A request with no `select` reads every
-  column, as `*` does, and is refused the same way.
-- The gate does not rely on `after_load/2` to hide a named or starred
-  column, because PgRest skips it for spread embeds. The one case left to
-  `after_load/2` is an empty `select=`: it names no column, so the gate
-  passes it and the rows come back trimmed to the allowed columns. That is
-  safe because an empty select has no embeds, spread or not.
-- `columns` and `on_conflict` are ignored by PgRest on reads, so the gate
-  ignores them too.
-- The root check runs on single-segment routes (`/<table>`), the only route
-  PgRest serves; any other path is a 404 before any resource is read.
-- It covers reads only.
+See PgRest's [Limits of application policies](https://github.com/agoodway/pgrest/blob/main/docs/guides/authorization-and-rls.md#limits-of-application-policies).

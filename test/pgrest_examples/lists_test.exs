@@ -1,11 +1,11 @@
 defmodule Authzura.PgRestExamples.ListsTest do
   use Authzura.PgRestExampleCase
 
-  @moduletag :pgrest
-
   @owner {"owner", %{"x-hasura-user-id" => "10"}}
   @member {"member", %{"x-hasura-org-id" => "1"}}
   @viewer {"viewer", %{"x-hasura-org-id" => "1"}}
+  @analyst {"analyst", %{"x-hasura-org-id" => "1"}}
+  @nested_analyst {"nested_analyst", %{"x-hasura-org-id" => "1"}}
   @other_org_member {"member", %{"x-hasura-org-id" => "2"}}
 
   defp ids({200, rows}), do: Enum.map(rows, & &1["id"])
@@ -43,10 +43,12 @@ defmodule Authzura.PgRestExamples.ListsTest do
       assert Enum.all?(rows, &Map.has_key?(&1, "title"))
     end
 
-    test "a star is refused where a column is hidden, and allowed where none is", ctx do
+    test "stars narrow to permitted columns", ctx do
       for path <- ["/todo_lists", "/todo_lists?select=*", "/todo_lists?select=id,*"] do
-        assert {status, _body} = get(ctx, path, @viewer)
-        assert status in [401, 403], path
+        assert {200, rows} = get(ctx, path, @viewer)
+        assert [_, _, _] = rows
+        refute Enum.any?(rows, &Map.has_key?(&1, "assignee_notes"))
+        assert Enum.all?(rows, &Map.has_key?(&1, "title"))
       end
 
       assert {200, [%{"assignee_notes" => _} | _]} = get(ctx, "/todo_lists?select=*", @member)
@@ -59,8 +61,7 @@ defmodule Authzura.PgRestExamples.ListsTest do
             "/todo_lists?assignee_notes=eq.secret-1",
             "/todo_lists?select=id&assignee_notes=like.secret*"
           ] do
-        assert {status, _body} = get(ctx, path, @viewer)
-        assert status in [401, 403], path
+        assert {403, %{"code" => "42501"}} = get(ctx, path, @viewer)
       end
     end
 
@@ -92,8 +93,7 @@ defmodule Authzura.PgRestExamples.ListsTest do
 
     test "are refused for a role that may not read the column", ctx do
       for query <- @hidden do
-        assert {status, _body} = get(ctx, "/todo_lists?" <> query, @viewer)
-        assert status in [401, 403], query
+        assert {403, %{"code" => "42501"}} = get(ctx, "/todo_lists?" <> query, @viewer)
       end
     end
 
@@ -124,9 +124,9 @@ defmodule Authzura.PgRestExamples.ListsTest do
                get(ctx, "/todo_lists?select=id&not.or=(assignee_notes.eq.x)&id=eq.1", @member)
     end
 
-    test "output names that are not permitted columns are dropped", ctx do
+    test "aliases of permitted columns are preserved", ctx do
       assert {200, [row | _]} = get(ctx, "/todo_lists?select=id,x:title&order=id.asc", @member)
-      assert row == %{"id" => 1}
+      assert row == %{"id" => 1, "x" => "groceries"}
     end
   end
 
@@ -139,19 +139,99 @@ defmodule Authzura.PgRestExamples.ListsTest do
   end
 
   describe "denials" do
-    test "a permission with a row limit is refused, not raised", ctx do
-      assert {status, _body} = get(ctx, "/todo_lists", {"capped", %{"x-hasura-org-id" => "1"}})
-      assert status in [401, 403]
+    test "a permission row limit caps reads and clamps requested limits", ctx do
+      capped = {"capped", %{"x-hasura-org-id" => "1"}}
+
+      for suffix <- ["", "&limit=10"] do
+        assert {200, [%{"id" => 1}]} =
+                 get(ctx, "/todo_lists?select=id&order=id.asc" <> suffix, capped)
+      end
+    end
+
+    test "writes are denied and leave rows unchanged", ctx do
+      assert {200, before} = get(ctx, "/todo_lists?order=id.asc", @member)
+
+      for method <- [:post, :patch, :put, :delete] do
+        assert {403, %{"code" => "42501"}} =
+                 request(ctx, method, "/todo_lists?id=eq.1", @member, [], %{
+                   "id" => 1,
+                   "title" => "changed"
+                 })
+      end
+
+      assert {200, ^before} = get(ctx, "/todo_lists?order=id.asc", @member)
+    end
+
+    test "execution plans are denied even when enabled by the endpoint", ctx do
+      assert {406, %{"code" => "PGRST107"}} =
+               request(ctx, :get, "/todo_lists", @member, [
+                 {"accept", "application/vnd.pgrst.plan"}
+               ])
+    end
+
+    test "aggregates are denied by default", ctx do
+      for select <- ["count()", "id.max()"] do
+        assert {403, %{"code" => "42501"}} =
+                 get(ctx, "/todo_lists?select=" <> select, @member)
+      end
+    end
+
+    test "counts are denied by default", ctx do
+      for mode <- ["exact", "planned", "estimated"] do
+        assert {403, %{"code" => "42501"}} =
+                 request(ctx, :get, "/todo_lists", @member, [{"prefer", "count=" <> mode}])
+      end
+    end
+
+    test "aggregates succeed when the permission grants them at the root", ctx do
+      assert {200, [%{"count" => 3}]} = get(ctx, "/todo_lists?select=count()", @analyst)
+      assert {200, [%{"max" => 3}]} = get(ctx, "/todo_lists?select=id.max()", @analyst)
+    end
+
+    test "counts succeed when the permission grants them at the root", ctx do
+      for mode <- ["exact", "planned", "estimated"] do
+        assert {status, rows} =
+                 request(ctx, :get, "/todo_lists?select=id&order=id.asc", @analyst, [
+                   {"prefer", "count=" <> mode}
+                 ])
+
+        assert status in [200, 206]
+        assert Enum.map(rows, & &1["id"]) == [1, 2, 3]
+      end
+    end
+
+    test "allow_aggregations does not grant aggregates without the root field", ctx do
+      for select <- ["count()", "id.max()"] do
+        assert {403, %{"code" => "42501"}} =
+                 get(ctx, "/todo_lists?select=" <> select, @nested_analyst)
+      end
+    end
+
+    test "allow_aggregations does not grant counts without the root field", ctx do
+      for mode <- ["exact", "planned", "estimated"] do
+        assert {403, %{"code" => "42501"}} =
+                 request(ctx, :get, "/todo_lists", @nested_analyst, [
+                   {"prefer", "count=" <> mode}
+                 ])
+      end
     end
 
     test "a role without a permission is refused", ctx do
       assert {status, _body} = get(ctx, "/todo_lists", {"stranger", %{}})
-      assert status in [401, 403]
+      assert status == 403
     end
 
     test "a missing session variable is refused by the gate, not raised", ctx do
       assert {status, _body} = get(ctx, "/todo_lists", {"owner", %{}})
-      assert status in [401, 403]
+      assert status == 403
+    end
+
+    test "conflicting session variables fail session construction and return no rows", ctx do
+      identity = {"owner", %{"x-hasura-user-id" => "10", "X-Hasura-User-Id" => "20"}}
+
+      assert {status, body} = get(ctx, "/todo_lists", identity)
+      assert status == 401
+      assert %{"code" => "42501"} = body
     end
   end
 end

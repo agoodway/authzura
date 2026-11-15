@@ -64,7 +64,7 @@ jobs:
           key: test-${{ runner.os }}-${{ hashFiles('.tool-versions', 'mix.lock') }}
       - run: mix deps.get
       # The test alias creates the database and runs priv/test_migrations.
-      # The PgRest, parity, differential and bench suites stay excluded.
+      # The PgRest examples run; parity, differential and bench suites stay excluded.
       # The property suite runs its default case count, as it does locally.
       - run: mix coveralls --seed 20261114
         env:

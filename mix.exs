@@ -12,9 +12,7 @@ defmodule Authzura.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
-      test_load_filters: [&test_file?/1],
       test_ignore_filters: [
-        ~r{^test/pgrest_examples/},
         ~r{^test/parity/reviewed_divergences\.exs$}
       ],
       aliases: aliases(),
@@ -56,14 +54,6 @@ defmodule Authzura.MixProject do
   defp elixirc_paths(env) when env in [:test, :bench], do: ["lib", "test/support", "bench/lib"]
   defp elixirc_paths(_), do: ["lib"]
 
-  # The PgRest examples run only with the optional local PgRest checkout.
-  defp pgrest?, do: File.exists?(Path.expand("../pgrest/mix.exs", __DIR__))
-
-  defp test_file?("test/pgrest_examples/" <> _ = path), do: pgrest?() and test_exs?(path)
-  defp test_file?(path), do: test_exs?(path)
-
-  defp test_exs?(path), do: String.ends_with?(path, "_test.exs")
-
   defp deps do
     [
       # Core
@@ -88,14 +78,10 @@ defmodule Authzura.MixProject do
       {:doctor, "~> 0.23.0", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4.5", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.19.0", only: [:dev, :test], runtime: false},
-      {:ex_dna, "~> 1.5.4", only: [:dev, :test], runtime: false}
-    ] ++ pgrest_deps()
-  end
-
-  # Optional local checkout of github.com/agoodway/pgrest; switch to a github
-  # ref once released.
-  defp pgrest_deps do
-    if pgrest?(), do: [{:pgrest, path: "../pgrest", only: :test}], else: []
+      {:ex_dna, "~> 1.5.4", only: [:dev, :test], runtime: false},
+      {:pgrest,
+       github: "agoodway/pgrest", ref: "ec8e88df0801eab1cf22a08fe6a9d93867fe31b5", only: :test}
+    ]
   end
 
   defp aliases do
