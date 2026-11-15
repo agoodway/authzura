@@ -1,0 +1,651 @@
+{
+  "id": "gen-2050693889ecf867",
+  "payload": {
+    "auth": {
+      "claims": {
+        "https://hasura.io/jwt/claims": {
+          "x-hasura-allowed-roles": [
+            "gen_3"
+          ],
+          "x-hasura-article-ids": "{}",
+          "x-hasura-code": "c6",
+          "x-hasura-codes": "{\"c0\"}",
+          "x-hasura-default-role": "gen_3",
+          "x-hasura-flag": "false",
+          "x-hasura-org-id": "6",
+          "x-hasura-user-id": "11"
+        },
+        "sub": "1"
+      },
+      "requested_role": null
+    },
+    "permissions": {
+      "gen_3": [
+        [
+          [
+            "audit",
+            "article_events"
+          ],
+          {
+            "columns": [
+              "id",
+              "article_id",
+              "kind"
+            ],
+            "filter": {
+              "article_id": {
+                "_gt": 15
+              }
+            },
+            "limit": 4
+          }
+        ],
+        [
+          [
+            "public",
+            "Order"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "line item": {
+                "_gt": "item 5"
+              }
+            },
+            "limit": 1
+          }
+        ],
+        [
+          [
+            "public",
+            "articles"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "_or": [
+                {
+                  "title": {
+                    "_like": "%a%"
+                  }
+                },
+                {
+                  "assignees": {
+                    "_has_keys_all": [
+                      "3"
+                    ]
+                  }
+                }
+              ]
+            },
+            "query_root_fields": [
+              "select_by_pk"
+            ]
+          }
+        ],
+        [
+          [
+            "public",
+            "comments"
+          ],
+          {
+            "columns": [
+              "id",
+              "author_id"
+            ],
+            "filter": {
+              "article": {
+                "_and": [
+                  {
+                    "events": {
+                      "_or": [
+                        {
+                          "_or": [
+                            {
+                              "kind": {
+                                "_nsimilar": "(A|b)%"
+                              }
+                            },
+                            {
+                              "kind": {
+                                "$nsimilar": "(A|b)%"
+                              }
+                            },
+                            {
+                              "article_id": {
+                                "_gt": 15
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "key_kinds"
+          ],
+          {
+            "columns": [
+              "rank",
+              "grade",
+              "score",
+              "ratio",
+              "born_on",
+              "seen_at"
+            ],
+            "filter": {
+              "$or": [
+                {
+                  "born_on": {
+                    "_eq": "2024-02-14"
+                  }
+                },
+                {
+                  "$or": [
+                    {
+                      "_or": []
+                    }
+                  ]
+                },
+                {
+                  "score": {
+                    "_is_null": true
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "membership_notes"
+          ],
+          {
+            "columns": [
+              "user_id"
+            ],
+            "filter": {}
+          }
+        ],
+        [
+          [
+            "public",
+            "org_memberships"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "user_id": {
+                "_gte": 13
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "organizations"
+          ],
+          {
+            "columns": [
+              "id"
+            ],
+            "filter": {},
+            "limit": 2,
+            "query_root_fields": []
+          }
+        ],
+        [
+          [
+            "public",
+            "published_articles"
+          ],
+          {
+            "columns": [
+              "id",
+              "author_id",
+              "title"
+            ],
+            "filter": {
+              "author": {
+                "_not": {
+                  "manager": {
+                    "_or": [
+                      {
+                        "org": {
+                          "id": {
+                            "_is_null": true
+                          }
+                        }
+                      },
+                      {
+                        "manager": {
+                          "org_id": {
+                            "_is_null": true
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "limit": 1
+          }
+        ],
+        [
+          [
+            "public",
+            "user_profiles"
+          ],
+          {
+            "columns": [
+              "user_id"
+            ],
+            "filter": {
+              "user_id": {
+                "_is_null": false
+              }
+            },
+            "limit": 4
+          }
+        ],
+        [
+          [
+            "public",
+            "users"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "role": {
+                "_nin": [
+                  "editor",
+                  "viewer",
+                  "admin"
+                ]
+              }
+            },
+            "limit": 3
+          }
+        ]
+      ],
+      "gen_3_twin": [
+        [
+          [
+            "audit",
+            "article_events"
+          ],
+          {
+            "columns": [
+              "id",
+              "article_id",
+              "kind"
+            ],
+            "filter": {
+              "article_id": {
+                "_gt": 15
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "Order"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "line item": {
+                "_gt": "item 5"
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "articles"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "_or": [
+                {
+                  "title": {
+                    "_like": "%a%"
+                  }
+                },
+                {
+                  "assignees": {
+                    "_has_keys_all": [
+                      "3"
+                    ]
+                  }
+                }
+              ]
+            },
+            "query_root_fields": [
+              "select_by_pk"
+            ]
+          }
+        ],
+        [
+          [
+            "public",
+            "comments"
+          ],
+          {
+            "columns": [
+              "id",
+              "author_id"
+            ],
+            "filter": {
+              "article": {
+                "_and": [
+                  {
+                    "events": {
+                      "_or": [
+                        {
+                          "_or": [
+                            {
+                              "kind": {
+                                "_nsimilar": "(A|b)%"
+                              }
+                            },
+                            {
+                              "kind": {
+                                "$nsimilar": "(A|b)%"
+                              }
+                            },
+                            {
+                              "article_id": {
+                                "_gt": 15
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "key_kinds"
+          ],
+          {
+            "columns": [
+              "rank",
+              "grade",
+              "score",
+              "ratio",
+              "born_on",
+              "seen_at"
+            ],
+            "filter": {
+              "$or": [
+                {
+                  "born_on": {
+                    "_eq": "2024-02-14"
+                  }
+                },
+                {
+                  "$or": [
+                    {
+                      "_or": []
+                    }
+                  ]
+                },
+                {
+                  "score": {
+                    "_is_null": true
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "membership_notes"
+          ],
+          {
+            "columns": [
+              "user_id"
+            ],
+            "filter": {}
+          }
+        ],
+        [
+          [
+            "public",
+            "org_memberships"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "user_id": {
+                "_gte": 13
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "organizations"
+          ],
+          {
+            "columns": [
+              "id"
+            ],
+            "filter": {},
+            "query_root_fields": []
+          }
+        ],
+        [
+          [
+            "public",
+            "published_articles"
+          ],
+          {
+            "columns": [
+              "id",
+              "author_id",
+              "title"
+            ],
+            "filter": {
+              "author": {
+                "_not": {
+                  "manager": {
+                    "_or": [
+                      {
+                        "org": {
+                          "id": {
+                            "_is_null": true
+                          }
+                        }
+                      },
+                      {
+                        "manager": {
+                          "org_id": {
+                            "_is_null": true
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "user_profiles"
+          ],
+          {
+            "columns": [
+              "user_id"
+            ],
+            "filter": {
+              "user_id": {
+                "_is_null": false
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "users"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "role": {
+                "_nin": [
+                  "editor",
+                  "viewer",
+                  "admin"
+                ]
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "read": {
+      "columns": [
+        "author_id"
+      ],
+      "limit": null,
+      "offset": null,
+      "order_by": [
+        [
+          "asc",
+          "id"
+        ]
+      ],
+      "relationships": [
+        [
+          "article",
+          {
+            "columns": [
+              "id",
+              "org_id",
+              "author_id",
+              "editor_id",
+              "status",
+              "is_published",
+              "title",
+              "body",
+              "internal_notes",
+              "assignees",
+              "external_ref",
+              "published_at"
+            ],
+            "limit": null,
+            "offset": null,
+            "order_by": null,
+            "relationships": [
+              [
+                "events",
+                {
+                  "columns": [
+                    "article_id",
+                    "kind"
+                  ],
+                  "limit": null,
+                  "offset": null,
+                  "order_by": [
+                    [
+                      "desc_nulls_first",
+                      "id"
+                    ]
+                  ],
+                  "relationships": [],
+                  "sample": null,
+                  "table": null,
+                  "where": null
+                }
+              ]
+            ],
+            "sample": null,
+            "table": null,
+            "where": null
+          }
+        ]
+      ],
+      "sample": null,
+      "table": [
+        "public",
+        "comments"
+      ],
+      "where": {}
+    },
+    "relationships": [
+      {
+        "kind": "object",
+        "mapping": {
+          "article_id": "id"
+        },
+        "path": [
+          "article"
+        ],
+        "table": [
+          "public",
+          "articles"
+        ]
+      },
+      {
+        "kind": "array",
+        "mapping": {
+          "id": "article_id"
+        },
+        "path": [
+          "article",
+          "events"
+        ],
+        "table": [
+          "audit",
+          "article_events"
+        ]
+      }
+    ]
+  },
+  "reason": "mismatch: article: nil, Hasura nil",
+  "seeds": {
+    "batch": 20261116,
+    "request": 572017
+  },
+  "tags": [
+    "_and",
+    "_or",
+    "_nsimilar",
+    "dollar_alias",
+    "_gt",
+    "rel_object",
+    "preload_target_root_disabled",
+    "hidden_fk_role",
+    "_like",
+    "_has_keys_all",
+    "rel_array"
+  ]
+}

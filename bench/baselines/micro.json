@@ -1,0 +1,59 @@
+{
+  "env": {
+    "os": "unix-darwin-aarch64",
+    "otp": "28",
+    "schedulers": 10,
+    "elixir": "1.19",
+    "cpu_model": "Apple M5"
+  },
+  "jobs": {
+    "input-filter": {
+      "runs": [
+        6875,
+        6834,
+        6375
+      ],
+      "median_ns": 6834
+    },
+    "overhead": {
+      "runs": [
+        122896,
+        128021,
+        124750
+      ],
+      "median_ns": 124750
+    },
+    "overhead-preload-nested-3": {
+      "runs": [
+        575332,
+        555646,
+        645062
+      ],
+      "median_ns": 575332
+    },
+    "preload-nested-3": {
+      "runs": [
+        3000,
+        3166,
+        3042
+      ],
+      "median_ns": 3042
+    },
+    "scope-flat-tenant": {
+      "runs": [
+        4209,
+        4250,
+        4167
+      ],
+      "median_ns": 4209
+    },
+    "scope-rel-filter-3hop": {
+      "runs": [
+        4917,
+        4916,
+        4875
+      ],
+      "median_ns": 4916
+    }
+  }
+}

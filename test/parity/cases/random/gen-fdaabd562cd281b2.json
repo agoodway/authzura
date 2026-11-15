@@ -1,0 +1,277 @@
+{
+  "id": "gen-fdaabd562cd281b2",
+  "payload": {
+    "auth": {
+      "claims": {
+        "https://hasura.io/jwt/claims": {
+          "x-hasura-allowed-roles": [
+            "gen_1"
+          ],
+          "x-hasura-article-ids": "{}",
+          "x-hasura-code": "a",
+          "x-hasura-codes": "{}",
+          "x-hasura-default-role": "gen_1",
+          "x-hasura-flag": "true",
+          "x-hasura-org-id": " 1",
+          "x-hasura-user-id": "1"
+        },
+        "sub": "1"
+      },
+      "requested_role": null
+    },
+    "permissions": {
+      "gen_1": [
+        [
+          [
+            "audit",
+            "article_events"
+          ],
+          {
+            "columns": [
+              "id",
+              "article_id"
+            ],
+            "filter": {
+              "_or": [
+                {
+                  "_or": [
+                    {
+                      "id": {
+                        "_gte": 12
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "audit",
+            "users"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "id": {
+                "_lt": 12
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "articles"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "assignees": {
+                "_contained_in": {
+                  "1": true,
+                  "5": false
+                }
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "key_kinds"
+          ],
+          {
+            "columns": [
+              "rank",
+              "score",
+              "meta",
+              "born_on",
+              "seen_at"
+            ],
+            "filter": {
+              "_or": []
+            },
+            "query_root_fields": []
+          }
+        ],
+        [
+          [
+            "public",
+            "membership_notes"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "note": {
+                "_is_null": false
+              }
+            },
+            "query_root_fields": [
+              "select_by_pk"
+            ]
+          }
+        ],
+        [
+          [
+            "public",
+            "org_memberships"
+          ],
+          {
+            "columns": [
+              "org_id",
+              "user_id",
+              "level"
+            ],
+            "filter": {
+              "user_id": {
+                "$gt": 7
+              }
+            },
+            "query_root_fields": []
+          }
+        ],
+        [
+          [
+            "public",
+            "organizations"
+          ],
+          {
+            "columns": [
+              "id",
+              "name"
+            ],
+            "filter": {
+              "users": {
+                "manager_id": {
+                  "$gte": "X-Hasura-Org-Id"
+                }
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "published_articles"
+          ],
+          {
+            "columns": [
+              "id",
+              "org_id",
+              "author_id",
+              "title"
+            ],
+            "filter": {
+              "author": {
+                "is_admin": {
+                  "_in": [
+                    false,
+                    true
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "user_profiles"
+          ],
+          {
+            "columns": [
+              "user_id",
+              "bio"
+            ],
+            "filter": {
+              "$or": [
+                {
+                  "user_id": {
+                    "$gte": 22
+                  }
+                },
+                {
+                  "bio": {
+                    "_like": "%1"
+                  }
+                }
+              ]
+            },
+            "query_root_fields": []
+          }
+        ],
+        [
+          [
+            "public",
+            "users"
+          ],
+          {
+            "columns": [
+              "id",
+              "org_id",
+              "email",
+              "role",
+              "is_admin"
+            ],
+            "filter": {
+              "$or": [
+                {
+                  "is_admin": true
+                },
+                {
+                  "_or": [
+                    {
+                      "manager": {
+                        "is_admin": {
+                          "_in": [
+                            true,
+                            true,
+                            true
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "is_admin": {
+                    "_neq": true
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      ]
+    },
+    "read": {
+      "columns": [
+        "id",
+        "name"
+      ],
+      "limit": null,
+      "offset": null,
+      "order_by": [
+        [
+          "asc",
+          "id"
+        ]
+      ],
+      "relationships": [],
+      "sample": null,
+      "table": [
+        "public",
+        "organizations"
+      ],
+      "where": {}
+    },
+    "relationships": []
+  },
+  "reason": "over_deny: Hasura granted, Authzura denied with {:invalid_session_value, \"x-hasura-org-id\", {:invalid_value, \"int8\"}}",
+  "seeds": {
+    "batch": 20261115,
+    "request": 636337
+  }
+}

@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:18
+    # pg_stat_statements serves the benchmark profile (DB time, statement counts).
+    command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track_planning=on
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Parity suite only: docker compose --profile parity up -d
+  hasura:
+    image: hasura/graphql-engine:v2.51.6
+    profiles: ["parity"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/authzura_parity
+      HASURA_GRAPHQL_ADMIN_SECRET: parity
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"authzura-parity-test-key-0123456789abcdef"}'
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/healthz || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # Benchmark only (test harness): docker compose --profile bench up -d --wait hasura_bench
+  # Needs the authzura_bench database, which `mix authzura.bench.seed` creates first.
+  hasura_bench:
+    image: hasura/graphql-engine:v2.51.6
+    profiles: ["bench"]
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/authzura_bench
+      HASURA_GRAPHQL_ADMIN_SECRET: bench
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"authzura-parity-test-key-0123456789abcdef"}'
+      HASURA_GRAPHQL_SCHEMA_SYNC_POLL_INTERVAL: "0"
+      HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/healthz || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 30

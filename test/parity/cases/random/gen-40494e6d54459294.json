@@ -1,0 +1,805 @@
+{
+  "id": "gen-40494e6d54459294",
+  "payload": {
+    "auth": {
+      "claims": {
+        "https://hasura.io/jwt/claims": {
+          "x-hasura-allowed-roles": [
+            "gen_0"
+          ],
+          "x-hasura-article-ids": "{NULL,1}",
+          "x-hasura-code": "a",
+          "x-hasura-codes": "{}",
+          "x-hasura-default-role": "gen_0",
+          "x-hasura-flag": "true",
+          "x-hasura-org-id": "1",
+          "x-hasura-user-id": "1"
+        },
+        "sub": "1"
+      },
+      "requested_role": null
+    },
+    "permissions": {
+      "gen_0": [
+        [
+          [
+            "audit",
+            "article_events"
+          ],
+          {
+            "columns": [
+              "id"
+            ],
+            "filter": {
+              "_exists": {
+                "_table": {
+                  "name": "published_articles",
+                  "schema": "public"
+                },
+                "_where": {
+                  "author": {
+                    "_exists": {
+                      "_table": {
+                        "name": "comments",
+                        "schema": "public"
+                      },
+                      "_where": {
+                        "article": {
+                          "_or": []
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "Order"
+          ],
+          {
+            "columns": [
+              "line item"
+            ],
+            "filter": {
+              "_or": [
+                {
+                  "_or": [
+                    {
+                      "line item": {
+                        "_nlike": "b%"
+                      }
+                    },
+                    {
+                      "line item": {
+                        "$lt": "X-Hasura-Code"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "_and": [
+                    {
+                      "line item": {
+                        "_nsimilar": "(A|b)%"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "_exists": {
+                    "_table": {
+                      "name": "comments",
+                      "schema": "public"
+                    },
+                    "_where": {
+                      "_or": [
+                        {
+                          "article": {
+                            "title": {
+                              "$similar": "(A|b)%"
+                            }
+                          }
+                        },
+                        {
+                          "author_id": {
+                            "_lte": "X-Hasura-Org-Id"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "articles"
+          ],
+          {
+            "columns": [
+              "org_id",
+              "editor_id",
+              "status",
+              "title",
+              "assignees",
+              "external_ref",
+              "published_at"
+            ],
+            "filter": {
+              "assignees": {
+                "_has_keys_any": [
+                  "1",
+                  "3"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "comments"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "_exists": {
+                "_table": {
+                  "name": "key_kinds",
+                  "schema": "public"
+                },
+                "_where": {
+                  "_and": [
+                    {
+                      "_or": [
+                        {
+                          "id": {
+                            "_in": "X-HASURA-ARTICLE-IDS"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "_or": [
+                        {
+                          "$or": [
+                            {
+                              "_exists": {
+                                "_table": {
+                                  "name": "Order",
+                                  "schema": "public"
+                                },
+                                "_where": {
+                                  "line item": {
+                                    "_neq": "X-Hasura-Code"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "grade": {
+                            "$neq": "C"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "id": {
+                        "_eq": "X-Hasura-User-Id"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "limit": 1
+          }
+        ],
+        [
+          [
+            "public",
+            "key_kinds"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "code": {
+                "_in": "X-Hasura-Codes"
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "membership_notes"
+          ],
+          {
+            "columns": "*",
+            "filter": {},
+            "query_root_fields": []
+          }
+        ],
+        [
+          [
+            "public",
+            "org_memberships"
+          ],
+          {
+            "columns": [
+              "user_id",
+              "level"
+            ],
+            "filter": {
+              "$and": [
+                {
+                  "_or": [
+                    {
+                      "_or": [
+                        {
+                          "_not": {
+                            "org_id": {
+                              "_neq": 10
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "organizations"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "_or": [
+                {
+                  "id": {
+                    "_is_null": true
+                  }
+                },
+                {
+                  "_exists": {
+                    "_table": {
+                      "name": "users",
+                      "schema": "audit"
+                    },
+                    "_where": {
+                      "$and": [
+                        {
+                          "_and": [
+                            {
+                              "_exists": {
+                                "_table": {
+                                  "name": "users",
+                                  "schema": "public"
+                                },
+                                "_where": {
+                                  "is_admin": {
+                                    "_eq": true
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "note": {
+                                "$niregex": "^g"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "_or": [
+                            {
+                              "id": {
+                                "_is_null": true
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "$and": [
+                            {
+                              "note": {
+                                "_nin": []
+                              }
+                            },
+                            {
+                              "_or": [
+                                {
+                                  "id": {
+                                    "_in": "X-HASURA-ARTICLE-IDS"
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "published_articles"
+          ],
+          {
+            "columns": [
+              "org_id",
+              "author_id",
+              "title"
+            ],
+            "filter": {
+              "author": {
+                "_and": [
+                  {
+                    "profile": {
+                      "user_id": {
+                        "_nin": [
+                          25
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "user_profiles"
+          ],
+          {
+            "columns": [
+              "user_id"
+            ],
+            "filter": {},
+            "limit": 1
+          }
+        ],
+        [
+          [
+            "public",
+            "users"
+          ],
+          {
+            "columns": [
+              "org_id",
+              "email",
+              "role",
+              "is_admin"
+            ],
+            "filter": {},
+            "limit": 4
+          }
+        ]
+      ],
+      "gen_0_twin": [
+        [
+          [
+            "audit",
+            "article_events"
+          ],
+          {
+            "columns": [
+              "id"
+            ],
+            "filter": {
+              "_exists": {
+                "_table": {
+                  "name": "published_articles",
+                  "schema": "public"
+                },
+                "_where": {
+                  "author": {
+                    "_exists": {
+                      "_table": {
+                        "name": "comments",
+                        "schema": "public"
+                      },
+                      "_where": {
+                        "article": {
+                          "_or": []
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "Order"
+          ],
+          {
+            "columns": [
+              "line item"
+            ],
+            "filter": {
+              "_or": [
+                {
+                  "_or": [
+                    {
+                      "line item": {
+                        "_nlike": "b%"
+                      }
+                    },
+                    {
+                      "line item": {
+                        "$lt": "X-Hasura-Code"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "_and": [
+                    {
+                      "line item": {
+                        "_nsimilar": "(A|b)%"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "_exists": {
+                    "_table": {
+                      "name": "comments",
+                      "schema": "public"
+                    },
+                    "_where": {
+                      "_or": [
+                        {
+                          "article": {
+                            "title": {
+                              "$similar": "(A|b)%"
+                            }
+                          }
+                        },
+                        {
+                          "author_id": {
+                            "_lte": "X-Hasura-Org-Id"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "articles"
+          ],
+          {
+            "columns": [
+              "org_id",
+              "editor_id",
+              "status",
+              "title",
+              "assignees",
+              "external_ref",
+              "published_at"
+            ],
+            "filter": {
+              "assignees": {
+                "_has_keys_any": [
+                  "1",
+                  "3"
+                ]
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "comments"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "_exists": {
+                "_table": {
+                  "name": "key_kinds",
+                  "schema": "public"
+                },
+                "_where": {
+                  "_and": [
+                    {
+                      "_or": [
+                        {
+                          "id": {
+                            "_in": "X-HASURA-ARTICLE-IDS"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "_or": [
+                        {
+                          "$or": [
+                            {
+                              "_exists": {
+                                "_table": {
+                                  "name": "Order",
+                                  "schema": "public"
+                                },
+                                "_where": {
+                                  "line item": {
+                                    "_neq": "X-Hasura-Code"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "grade": {
+                            "$neq": "C"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "id": {
+                        "_eq": "X-Hasura-User-Id"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "key_kinds"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "code": {
+                "_in": "X-Hasura-Codes"
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "membership_notes"
+          ],
+          {
+            "columns": "*",
+            "filter": {},
+            "query_root_fields": []
+          }
+        ],
+        [
+          [
+            "public",
+            "org_memberships"
+          ],
+          {
+            "columns": [
+              "user_id",
+              "level"
+            ],
+            "filter": {
+              "$and": [
+                {
+                  "_or": [
+                    {
+                      "_or": [
+                        {
+                          "_not": {
+                            "org_id": {
+                              "_neq": 10
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "organizations"
+          ],
+          {
+            "columns": "*",
+            "filter": {
+              "_or": [
+                {
+                  "id": {
+                    "_is_null": true
+                  }
+                },
+                {
+                  "_exists": {
+                    "_table": {
+                      "name": "users",
+                      "schema": "audit"
+                    },
+                    "_where": {
+                      "$and": [
+                        {
+                          "_and": [
+                            {
+                              "_exists": {
+                                "_table": {
+                                  "name": "users",
+                                  "schema": "public"
+                                },
+                                "_where": {
+                                  "is_admin": {
+                                    "_eq": true
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "note": {
+                                "$niregex": "^g"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "_or": [
+                            {
+                              "id": {
+                                "_is_null": true
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "$and": [
+                            {
+                              "note": {
+                                "_nin": []
+                              }
+                            },
+                            {
+                              "_or": [
+                                {
+                                  "id": {
+                                    "_in": "X-HASURA-ARTICLE-IDS"
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "published_articles"
+          ],
+          {
+            "columns": [
+              "org_id",
+              "author_id",
+              "title"
+            ],
+            "filter": {
+              "author": {
+                "_and": [
+                  {
+                    "profile": {
+                      "user_id": {
+                        "_nin": [
+                          25
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        [
+          [
+            "public",
+            "user_profiles"
+          ],
+          {
+            "columns": [
+              "user_id"
+            ],
+            "filter": {}
+          }
+        ],
+        [
+          [
+            "public",
+            "users"
+          ],
+          {
+            "columns": [
+              "org_id",
+              "email",
+              "role",
+              "is_admin"
+            ],
+            "filter": {}
+          }
+        ]
+      ]
+    },
+    "read": {
+      "columns": [
+        "id",
+        "article_id",
+        "author_id",
+        "body"
+      ],
+      "limit": null,
+      "offset": null,
+      "order_by": [
+        [
+          "asc",
+          "id"
+        ]
+      ],
+      "relationships": [],
+      "sample": null,
+      "table": [
+        "public",
+        "comments"
+      ],
+      "where": {}
+    },
+    "relationships": []
+  },
+  "reason": "over_deny: Hasura granted, Authzura denied with {:invalid_session_value, \"x-hasura-article-ids\", :invalid_array_literal}",
+  "seeds": {
+    "batch": 20261115,
+    "request": 636337
+  }
+}

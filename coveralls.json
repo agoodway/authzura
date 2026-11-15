@@ -1,0 +1,1 @@
+{"coverage_options": {"minimum_coverage": 85}, "skip_files": ["test/", "bench/", "deps/"]}

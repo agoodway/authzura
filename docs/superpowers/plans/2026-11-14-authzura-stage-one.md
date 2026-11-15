@@ -24,7 +24,7 @@ Anything else is denied.
 **Tech Stack:**
 - Elixir ~> 1.19 (OTP 28), Ecto/Ecto SQL ~> 3.13, Postgrex, Jason,
   Telemetry, NimbleOptions, optional JOSE
-- Postgres 16 (Docker)
+- Postgres 18 (Docker)
 - Hasura `v2.51.6`, the latest v2 release and the compatibility target
   (Docker, parity suite only)
 
@@ -51,8 +51,10 @@ Flag the conflict when that happens.
 - **Schema-qualified SQL.** Every source Authzura emits (the root,
   `EXISTS` subqueries and preload queries) carries an explicit prefix.
 - **One role per request.** These are denied, each with a diagnostic:
-  merged roles, inherited roles, computed fields, and remote relationships
-  (including v2.51's `to_source` relationships in permission filters).
+  merged roles, inherited roles, computed fields in filters, and remote
+  relationships (including v2.51's `to_source` relationships in permission
+  filters). A select permission's `computed_fields` grant is ignored with a
+  `:warning` diagnostic; computed fields are never exposed.
 - **Composite relationship keys:** at most 8 column pairs. Wider mappings
   are denied at load time.
 - **Public repo.** Code, docs, tests and fixtures never mention a private
@@ -301,7 +303,7 @@ only append to it.
     - `HASURA_GRAPHQL_JWT_SECRET={"type":"HS256","key":"<32+ byte test key>"}`
     - a `/healthz` healthcheck
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```elixir
 defmodule Authzura.HarnessTest do
@@ -315,16 +317,16 @@ defmodule Authzura.HarnessTest do
 end
 ```
 
-- [ ] **Step 2: Run** `docker compose up -d postgres && mix test test/authzura/harness_test.exs`.
+- [x] **Step 2: Run** `docker compose up -d postgres && mix test test/authzura/harness_test.exs`.
   Expected: compile failure (`Authzura.DataCase` is undefined).
-- [ ] **Step 3: Implement the scaffold.** `FixtureSchema.up/2` must be
+- [x] **Step 3: Implement the scaffold.** `FixtureSchema.up/2` must be
   idempotent: use `IF NOT EXISTS`, and create the enum inside a
   `DO $$ ... EXCEPTION WHEN duplicate_object ... $$` block.
-- [ ] **Step 4: Add a CommittedCase smoke test.**
+- [x] **Step 4: Add a CommittedCase smoke test.**
   - After inserting an organization, a second connection sees it. Use
     `Task.async` to check out a connection and run `Repo.query!`.
   - After `on_exit` truncation, the table is empty for the next test.
-- [ ] **Step 5: Run** `mix test && mix quality`. Expected: PASS, and
+- [x] **Step 5: Run** `mix test && mix quality`. Expected: PASS, and
   quality exits 0.
 - [ ] **Step 6: Checkpoint.**
   `chore: scaffold authzura with quality tooling and test harnesses`
@@ -342,7 +344,7 @@ later tasks use the replacement.
 - Test: `test/feasibility/ecto_constructs_test.exs` (DataCase) and
   `test/feasibility/transactions_test.exs` (CommittedCase)
 
-- [ ] **Step 1: Write the construct tests.** Each one asserts on
+- [x] **Step 1: Write the construct tests.** Each one asserts on
   `Ecto.Adapters.SQL.to_sql(:all, Repo, q)` and on the returned rows.
   Assemble queries at runtime, never with compile-time literals for
   names.
@@ -386,7 +388,7 @@ later tasks use the replacement.
      `field(a, ^"status") == type(^"draft", ...)` or a SQL cast. Record
      the form that works. An invalid label must be caught in Elixir,
      against the introspected labels, before the query runs.
-- [ ] **Step 2: Write the transaction tests** (CommittedCase).
+- [x] **Step 2: Write the transaction tests** (CommittedCase).
   1. Inside `Repo.transaction`, the first statement
      `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`
      succeeds, and a later `INSERT` raises `read_only_sql_transaction`.
@@ -400,9 +402,9 @@ later tasks use the replacement.
   3. **`:persistent_term` and `:atomics`:** a generation stored under
      `{Authzura.Store, name}` holds an `:atomics` ref, and that ref can be
      updated without rewriting the term.
-- [ ] **Step 3: Run** `mix test test/feasibility`. Iterate until it
+- [x] **Step 3: Run** `mix test test/feasibility`. Iterate until it
   passes, recording each chosen form in the moduledocs.
-- [ ] **Step 4: Run** `mix quality`. Expected: PASS.
+- [x] **Step 4: Run** `mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `test: prove Ecto and Postgres constructs used by the compiler`
 
@@ -471,18 +473,18 @@ later tasks use the replacement.
   - `node_count/1`
   - `root_columns/1`: ignores relationship and exists subtrees
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `binding_depth({:relationship, "a", {:relationship, "b", {:and, []}}}) == 2`
   - `binding_depth({:exists, {"public", "users"}, {:and, []}}) == 1`
   - `syntactic_depth({:and, [{:not, {:or, []}}]}) == 3`
   - `session_refs` finds names inside nested relationship and exists
     nodes.
   - `root_columns` excludes columns inside relationship subtrees.
-- [ ] **Step 2: Run** `mix test test/authzura/ast_test.exs`. Expected:
+- [x] **Step 2: Run** `mix test test/authzura/ast_test.exs`. Expected:
   FAIL.
-- [ ] **Step 3: Implement** the structs, with `@enforce_keys` on identity
+- [x] **Step 3: Implement** the structs, with `@enforce_keys` on identity
   fields, and write the AST functions as reductions.
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.** `feat: add permission model and filter AST`
 
 ---
@@ -516,7 +518,7 @@ later tasks use the replacement.
   7. No effective role gives `:no_role`.
   8. Write the effective role back to `vars["x-hasura-role"]`.
 
-- [ ] **Step 1: Write the failing tests**, one per rule:
+- [x] **Step 1: Write the failing tests**, one per rule:
 
 ```elixir
 assert {:ok, %Session{role: "editor", vars: %{"x-hasura-user-id" => "1", "x-hasura-role" => "editor"}}} =
@@ -536,9 +538,9 @@ assert {:error, {:invalid_session, :role_not_allowed, "a"}} = Session.new(%{}, a
 assert {:error, {:invalid_session, :no_role, nil}} = Session.new(%{}, [])
 ```
 
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement** it as a `with` pipeline.
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement** it as a `with` pipeline.
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: add session normalization and Hasura role resolution`
 
@@ -575,7 +577,7 @@ assert {:error, {:invalid_session, :no_role, nil}} = Session.new(%{}, [])
 - **`fingerprint/2`** is the md5 of a deterministically ordered aggregate
   of those same rows: column names, types, nullability and constraints.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `users.email` has `base_kind: :citext` and `nullable?: false`.
   - `articles.status` has `base_kind: :enum` and
     `enum_labels: ["draft", "review", "published"]`.
@@ -590,9 +592,9 @@ assert {:error, {:invalid_session, :no_role, nil}} = Session.new(%{}, [])
   - **Fingerprint (CommittedCase):** stable across two calls, and it
     changes after `ALTER TABLE articles ADD COLUMN x int`. Drop the column
     in `on_exit`.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: introspect Postgres catalog with a column type contract`
 
@@ -666,7 +668,7 @@ assert {:error, {:invalid_session, :no_role, nil}} = Session.new(%{}, [])
   - `:in` with `[]` is `false`, and `:nin` with `[]` is `true`.
   - Use the constructs recorded in Task 2 for each type.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `parse_array_literal("{1,2,3}") == {:ok, ["1","2","3"]}`
   - `parse_array_literal("{}") == {:ok, []}`
   - `parse_array_literal(~s({"a,b","c\\"d"})) == {:ok, ["a,b", ~s(c"d)]}`
@@ -683,9 +685,9 @@ assert {:error, {:invalid_session, :no_role, nil}} = Session.new(%{}, [])
     above.
   - `:in` with `[]` matches no rows, and `:nin` with `[]` matches all
     rows.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: add Postgres operator signatures and value casting`
 
@@ -776,7 +778,7 @@ assert {:error, {:invalid_session, :no_role, nil}} = Session.new(%{}, [])
   - A missing `filter` key gives a `:deny` with `:missing_filter`.
   - A negative `limit` gives a `:deny`.
   - A missing `query_root_fields` means `:all`, and `[]` stays `[]`.
-  - A non-empty `computed_fields` gives a `:deny`.
+  - A non-empty `computed_fields` grant is ignored with a `:warning` (computed fields are never exposed); a filter that references a computed field still gives a `:deny`.
   - `columns: "*"` expands to every introspected column, sorted.
   - An unknown column gives a `:deny`.
   - A filter that uses a relationship with a `:deny` diagnostic is itself
@@ -790,7 +792,7 @@ assert {:error, {:invalid_session, :no_role, nil}} = Session.new(%{}, [])
 - **Inherited roles:** each role in `inherited_roles` gets a `:deny`, and
   no permission is created for it.
 
-- [ ] **Step 1: Write the failing tests** for every acceptance case above.
+- [x] **Step 1: Write the failing tests** for every acceptance case above.
   For example:
 
 ```elixir
@@ -802,10 +804,10 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
                                   "_where" => %{"id" => %{"_eq" => "X-Hasura-User-Id"}}}}, :permission, ctx)
 ```
 
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.** These are pure functions, and the error path
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.** These are pure functions, and the error path
   accumulates as a reversed list.
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: parse Hasura metadata, bool_exp and relationships`
 
@@ -848,7 +850,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   any transaction.
 - **`parse_input/2`** delegates to `BoolExp.parse(json, :input, ctx)`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - The loaded snapshot has
     `permissions[{"user", {"public","articles"}, :select}].status == :ok`.
   - A metadata table that's missing from Postgres gives a `:deny`
@@ -867,9 +869,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
       post-DDL catalog, and the retry count is 1.
     - When the hook changes the schema on every attempt, the result is
       `{:error, :unstable_source}` after `max_retries`.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: load Hasura metadata coherently from hdb_catalog`
 
@@ -927,7 +929,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   failure sets the status to `{:denied, [diag]}` and adds a snapshot
   diagnostic.
 
-- [ ] **Step 1: Write the failing tests.** Use SQL snapshots via `to_sql`,
+- [x] **Step 1: Write the failing tests.** Use SQL snapshots via `to_sql`,
   plus row assertions against fixture rows seeded in each test.
   - **Row filters:**
     - An author-only filter (`author_id = session user`) returns only
@@ -998,9 +1000,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
     - The literal `"bogus"` compared against the enum gives a `:deny`.
       (Task 7 already catches this at translation.)
     - A valid snapshot comes back unchanged.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: compile permissions to Ecto and validate them at load`
 
@@ -1082,7 +1084,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
 - **Telemetry:** `[:authzura, :load | :reload, :start | :stop |
   :exception]`.
 
-- [ ] **Step 1: Write the failing TestSource tests.** Use an injected
+- [x] **Step 1: Write the failing TestSource tests.** Use an injected
   clock and explicit `Store.poll/1` calls; never sleep.
   - **Readiness:** before the first load, `current/1` gives `:not_ready`.
     The TestSource blocks `load` until the test sends `:release`.
@@ -1113,16 +1115,16 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - **Concurrency:** 50 tasks call `current/1` while reloads run in a
     loop. Each read sees a generation whose `seq` matches its snapshot's
     marker.
-- [ ] **Step 2: Write a failing real-source test** (CommittedCase).
+- [x] **Step 2: Write a failing real-source test** (CommittedCase).
   1. Write the fixture metadata and start an instance with
      `poll_interval: nil`.
   2. Run `ALTER TABLE articles DROP COLUMN body`, restoring it in
      `on_exit`.
   3. After `Store.poll/1`, the generation's `seq` has increased and the
      snapshot no longer contains `body`.
-- [ ] **Step 3: Run.** Expected: FAIL.
-- [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 3: Run.** Expected: FAIL.
+- [x] **Step 4: Implement.**
+- [x] **Step 5: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 6: Checkpoint.**
   `feat: add per-instance Store with atomic generations and freshness`
 
@@ -1218,14 +1220,14 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
 - **Telemetry:** `[:authzura, :scope, :start | :stop | :exception]`,
   with `result: :granted | :denied` and the reason in the metadata.
 
-- [ ] **Step 1: Write the failing shape tests**, one per reason above,
+- [x] **Step 1: Write the failing shape tests**, one per reason above,
   plus these accepted cases:
   - A read-only CTE named `"articles"` is accepted, and the final SQL
     still reads `"public"."articles"`.
   - A same-table `union_all` is accepted. Its limit and offset apply to
     the whole result, while each branch has its own permission cap.
   - `limit(^n)` is accepted.
-- [ ] **Step 2: Write the failing scope tests.**
+- [x] **Step 2: Write the failing scope tests.**
   - **Columns:**
     - The SQL `SELECT` list contains only the requested, allowed
       columns.
@@ -1258,9 +1260,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
     The tasks get sandbox access with `Sandbox.allow/3`. This proves no
     session values are cached.
   - **Telemetry:** a denial emits `:denied` with its reason.
-- [ ] **Step 3: Run.** Expected: FAIL.
-- [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 3: Run.** Expected: FAIL.
+- [x] **Step 4: Implement.**
+- [x] **Step 5: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 6: Checkpoint.**
   `feat: scope Ecto queries with Hasura select permissions`
 
@@ -1295,7 +1297,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
 - **`Authzura.all/3` and `one/3`** call `Scope.build` (Task 11), then
   `Executor.run`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `all/3` returns maps with exactly the requested keys.
   - `one/3` with two matching rows gives `:multiple_results`.
   - **Dynamic repo:** start an anonymous `{:ok, pid} =
@@ -1314,9 +1316,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
     - The same fragment inside an already-open caller transaction isn't
       wrapped. This documents the trusted-caller boundary.
   - An exception span is emitted when the repo raises.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: add read-only executors bound to the authorized repo`
 
@@ -1354,7 +1356,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
     permission filter, which compiles in `:permission` mode. The result
     then goes through Scope's projection and limit logic.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - Filtering on the hidden `salary` gives
     `{:forbidden_columns, ["salary"]}`, and sorting on it does too.
   - **Session-looking literals:** an input value of `"X-Hasura-User-Id"`
@@ -1379,9 +1381,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - **Source-neutral:** a TestSource whose `parse_input/2` returns a
     fixed AST is used. This proves `Input` never calls Hasura's parser
     directly.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: add validated input path for untrusted filters`
 
@@ -1425,7 +1427,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - Each association must match a Hasura relationship with the same
     target and the same ordered mapping.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - **Allowlist:**
     - An allowed relationship validates.
     - An undeclared relationship gives `:forbidden`, and so does a target
@@ -1441,9 +1443,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
     - A join-bound preload is rejected.
   - **Scope mode:** `scope/3` with any preload gives
     `:preload_requires_execute`.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: validate relationship-allowlist preload trees`
 
@@ -1493,7 +1495,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - It recurses into children using the child's key columns, then strips
     the non-public stitching columns at every level.
 
-- [ ] **Step 1: Write the failing tests.** Call `Loader.load` directly,
+- [x] **Step 1: Write the failing tests.** Call `Loader.load` directly,
   with parents fetched by a plain query.
   - **Per-parent limit:** two articles have three comments each, and the
     permission limit is 1. Each article gets exactly one comment.
@@ -1517,9 +1519,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - **Large batch:** loading the comments of 5,000 parent articles uses
     one bind parameter per key column. Assert the built query's parameter
     count (Review Focus 2).
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: load relationship preloads with per-parent limits`
 
@@ -1549,7 +1551,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   after the root query and before the first level. It's `@doc false` and
   test-only.
 
-- [ ] **Step 1: Write the failing consistency tests** (CommittedCase).
+- [x] **Step 1: Write the failing consistency tests** (CommittedCase).
   These must **fail under READ COMMITTED**; Task 2 proved the setup can
   tell the difference.
   - **Fixture:** the comment permission filters through the parent
@@ -1567,7 +1569,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
     test detects the anomaly.
   - **Reload mid-operation:** a reload published between levels (through
     the hook) doesn't change the generation in use.
-- [ ] **Step 2: Write the failing API tests** (CommittedCase).
+- [x] **Step 2: Write the failing API tests** (CommittedCase).
   - `all(Article, session, preload: [comments: [order_by: [asc: :id]]])`
     nests `comments` under each article.
   - Preloads inside `Repo.transaction` give `:preload_in_transaction`,
@@ -1575,9 +1577,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - `all_input` with an allowed `preload:` works.
   - A plain Ecto `preload(:comments)` in an `all/3` query is translated
     and loaded.
-- [ ] **Step 3: Run.** Expected: FAIL.
-- [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 3: Run.** Expected: FAIL.
+- [x] **Step 4: Implement.**
+- [x] **Step 5: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 6: Checkpoint.**
   `feat: run preloads in one consistent read-only snapshot`
 
@@ -1628,7 +1630,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
 - **No token:** a `nil` token with `unauthorized_role:` gives
   `{:ok, %Session{role: unauthorized_role}}`.
 
-- [ ] **Step 1: Write the failing tests**, ported from Hasura's
+- [x] **Step 1: Write the failing tests**, ported from Hasura's
   `tests-py/test_jwt.py` and `test_jwt_claims_map.py`:
   - **Claims:**
     - Valid claims pass.
@@ -1652,9 +1654,9 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - **No token:** `nil`, with and without `unauthorized_role`.
   - **Roles:** a requested role that isn't allowed gives
     `{:invalid_session, :role_not_allowed, _}`.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `mix test && mix quality`. Expected: PASS.
 - [ ] **Step 5: Checkpoint.**
   `feat: add optional Hasura-compatible JWT verification`
 
@@ -1702,16 +1704,20 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - Record the result in the release notes: counts only, no metadata.
   - Never commit third-party metadata.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - Fixture metadata with one denied permission exits 1, and the output
     names the role, the table and the reason.
   - Clean metadata exits 0.
   - `--strict` with only warnings exits 1.
-- [ ] **Step 2: Run.** Expected: FAIL.
-- [ ] **Step 3: Implement** the task, the README and the examples test.
-- [ ] **Step 4: Run** `mix test && mix quality && mix docs`. Expected:
+- [x] **Step 2: Run.** Expected: FAIL.
+- [x] **Step 3: Implement** the task, the README and the examples test.
+- [x] **Step 4: Run** `mix test && mix quality && mix docs`. Expected:
   PASS, with no doc warnings.
 - [ ] **Step 5: Checkpoint.** `feat: add mix authzura.check and user guide`
+- [x] **Release gate (before tagging 0.1.0).** Run `mix authzura.check`
+  against at least one large real-world Hasura v2 metadata set (hundreds of
+  tables). Record counts only in the release notes, and never commit
+  third-party metadata.
 
 ---
 
@@ -1746,7 +1752,7 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   their returned order when an `order_by` was requested, and are compared
   as sets otherwise.
 
-- [ ] **Step 1: Write the parity tests.** Each case runs the same read
+- [x] **Step 1: Write the parity tests.** Each case runs the same read
   through Hasura GraphQL and through Authzura. It asserts that the
   **complete returned values** (every key and value) are equal, or that
   the errors are equivalent.
@@ -1765,10 +1771,10 @@ assert {:ok, {:exists, {"public", "users"}, {:compare, "id", :eq, {:session, "x-
   - **Preloads:** each GraphQL nested selection is compared against
     `all(..., preload:)`. A limited relationship without `order_by` is
     compared by cardinality and membership.
-- [ ] **Step 2: Run** `docker compose --profile parity up -d && mix test
+- [x] **Step 2: Run** `docker compose --profile parity up -d && mix test
   --only hasura_parity`. Expected: PASS. Investigate any diff, and fix
   whichever side diverges from Hasura's tested behavior.
-- [ ] **Step 3: Run** `mix test && mix quality`. The default run excludes
+- [x] **Step 3: Run** `mix test && mix quality`. The default run excludes
   parity. Expected: PASS.
 - [ ] **Step 4: Checkpoint.** `test: add opt-in Hasura v2.51.6 parity suite`
 

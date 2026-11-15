@@ -1,0 +1,136 @@
+lib/api-tests/src/Test/API/Metadata/LogicalModelsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/Common.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/DefaultRootFieldsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/SelectPermission/DisableAllRootFieldsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/SelectPermission/EnableAggSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/SelectPermission/EnableAllRootFieldsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/SelectPermission/EnablePKSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/DisableRootFields/SelectPermission/RelationshipSpec.hs	ported	relationships_test.exs: the author list is accessible, with articles through the relationship
+lib/api-tests/src/Test/Auth/Authorization/InheritedRoles/ColumnRedaction/BigquerySpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/InheritedRoles/ColumnRedaction/NotSupportedSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/InheritedRoles/ColumnRedaction/SqlserverSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Auth/Authorization/InheritedRoles/ColumnRedactionSpec.hs	out_of_scope	
+lib/api-tests/src/Test/DataConnector/MockAgent/BasicQuerySpec.hs	out_of_scope	
+lib/api-tests/src/Test/DataConnector/MockAgent/DeleteMutationsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/DataConnector/MockAgent/InsertMutationsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/DataConnector/MockAgent/QueryRelationshipsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/DataConnector/MockAgent/RemoteSourcePermissionPredicateSpec.hs	out_of_scope	
+lib/api-tests/src/Test/DataConnector/MockAgent/UpdateMutationsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/DataConnector/SelectPermissionsSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Mutations/Delete/ValidationSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Mutations/Update/ValidationSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Queries/FilterSearch/AggregationPredicatesSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Queries/PermissionsKnowAboutColumnNullabilitySpec.hs	out_of_scope	
+lib/api-tests/src/Test/Queries/Relationship/PermissionRootReferenceSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Queries/Simple/ObjectQueriesSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Regression/InsertOnConflict8260Spec.hs	out_of_scope	
+lib/api-tests/src/Test/Regression/OptimizePermissionFiltersSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Regression/RemoteRelationshipStringifyNum8387Spec.hs	out_of_scope	
+lib/api-tests/src/Test/Schema/ComputedFields/TableSpec.hs	out_of_scope	
+lib/api-tests/src/Test/Schema/RemoteRelationships/XToDBArrayRelationshipSpec.hs	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/in_sql_identifier_array.yaml	ported	operators_test.exs: _nin on an information_schema.sql_identifier column
+tests-py/queries/graphql_query/boolexp/basic/query_account_permission_fail.yaml	ported	row_filters_test.exs: a user who is not an admin sees none
+tests-py/queries/graphql_query/boolexp/basic/query_account_permission_success.yaml	ported	row_filters_test.exs: a user who is an admin sees every account
+tests-py/queries/graphql_query/boolexp/basic/schema_setup_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/schema_teardown_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_article_author_is_published_and_registered.yaml	ported	row_filters_test.exs: an object relationship under _and and _or
+tests-py/queries/graphql_query/boolexp/basic/select_article_author_not_published_or_not_registered.yaml	ported	row_filters_test.exs: an object relationship under _and and _or
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_operator_ne_not_found_err_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_operator_ne_not_found_err_postgres.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_unexpected_operator_in_where_err_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_unexpected_operator_in_where_err_postgres.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_and_in.yaml	divergence	comparisons_test.exs: _and of two _in conditions, as a single object
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_gt.yaml	ported	comparisons_test.exs: _gt
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_gte.yaml	ported	comparisons_test.exs: _gte
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_in.yaml	ported	comparisons_test.exs: _in
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_in_empty_array_postgres.yaml	ported	comparisons_test.exs: _in [] returns no authors
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_lt.yaml	ported	comparisons_test.exs: _lt
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_lte.yaml	divergence	comparisons_test.exs: _lte with articles where id > 1
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_neq.yaml	divergence	comparisons_test.exs: _neq with articles where is_published != false
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_nin.yaml	divergence	comparisons_test.exs: _nin with articles where id > 1
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_nin_empty_array.yaml	ported	comparisons_test.exs: _nin [] returns every author
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_nin_empty_array_postgres.yaml	ported	comparisons_test.exs: _nin [] returns every author
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_not_lt.yaml	ported	comparisons_test.exs: _not _lt reads like _gte
+tests-py/queries/graphql_query/boolexp/basic/select_author_article_where_permissions.yaml	divergence	relationships_test.exs: as admin, every author with an article
+tests-py/queries/graphql_query/boolexp/basic/select_bools_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_query_order_delivered_at_is_not_null.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_query_order_delivered_at_is_null.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_uuid_test_in_uuid_col_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/select_uuid_test_in_uuid_col_postgres.yaml	ported	operators_test.exs: _in on a uuid column
+tests-py/queries/graphql_query/boolexp/basic/self_referential_relationships.yaml	ported	row_filters_test.exs: self-referential array and object relationships
+tests-py/queries/graphql_query/boolexp/basic/setup.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/setup_invalid_fkey_relationship_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/setup_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/teardown.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/basic/teardown_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/jsonb/query_cast_jsonb_to_string.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/jsonb/select_article_author_jsonb_contained_in_bestseller_latest.yaml	ported	jsonb_test.exs: _contained_in [bestseller, latest], with the author
+tests-py/queries/graphql_query/boolexp/jsonb/select_article_author_jsonb_contained_in_latest.yaml	ported	jsonb_test.exs: _contained_in [latest], with the author
+tests-py/queries/graphql_query/boolexp/jsonb/select_article_author_jsonb_contains_latest.yaml	ported	jsonb_test.exs: _contains a string element, with the author
+tests-py/queries/graphql_query/boolexp/jsonb/select_author_article_jsonb_contains_bestseller.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/jsonb/select_product_jsonb_has_key_sim_type.yaml	ported	jsonb_test.exs: _has_key with a key that has a space
+tests-py/queries/graphql_query/boolexp/jsonb/select_product_jsonb_has_keys_all_ram_touchscreen.yaml	ported	jsonb_test.exs: _has_keys_all
+tests-py/queries/graphql_query/boolexp/jsonb/select_product_jsonb_has_keys_any_os_operating_system.yaml	ported	jsonb_test.exs: _has_keys_any
+tests-py/queries/graphql_query/boolexp/jsonb/select_product_jsonb_path_exists.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/jsonb/select_product_jsonb_path_match.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/jsonb/setup.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/jsonb/teardown.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/schema_setup_bigquery.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/schema_setup_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/schema_teardown_bigquery.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/schema_teardown_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/select_city_where_ilike_postgres.yaml	ported	search_test.exs: _ilike: names starting with new, any case
+tests-py/queries/graphql_query/boolexp/search/select_city_where_iregex_postgres.yaml	ported	search_test.exs: _iregex: names starting with fram, any case
+tests-py/queries/graphql_query/boolexp/search/select_city_where_like.yaml	ported	search_test.exs: _like: names ending with ham
+tests-py/queries/graphql_query/boolexp/search/select_city_where_like_bigquery.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/select_city_where_like_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/select_city_where_nilike_postgres.yaml	ported	search_test.exs: _nilike: names not starting with new
+tests-py/queries/graphql_query/boolexp/search/select_city_where_niregex_postgres.yaml	ported	search_test.exs: _niregex: names not starting with new
+tests-py/queries/graphql_query/boolexp/search/select_city_where_nlike.yaml	ported	search_test.exs: _nlike: names not ending with ham
+tests-py/queries/graphql_query/boolexp/search/select_city_where_nlike_bigquery.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/select_city_where_nlike_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/select_city_where_not_similar_postgres.yaml	ported	search_test.exs: _nsimilar: names not ending with ham
+tests-py/queries/graphql_query/boolexp/search/select_city_where_nregex_postgres.yaml	ported	search_test.exs: _nregex is case-sensitive: no name matches new.*
+tests-py/queries/graphql_query/boolexp/search/select_city_where_regex_postgres.yaml	ported	search_test.exs: _regex: names ending with gham
+tests-py/queries/graphql_query/boolexp/search/select_city_where_similar_postgres.yaml	ported	search_test.exs: _similar: names ending with gham
+tests-py/queries/graphql_query/boolexp/search/select_project_where_ilike_postgres.yaml	ported	search_test.exs: _ilike on a character column
+tests-py/queries/graphql_query/boolexp/search/setup.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/setup_bigquery.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/setup_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/teardown.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/teardown_bigquery.yaml	out_of_scope	
+tests-py/queries/graphql_query/boolexp/search/teardown_mssql.yaml	out_of_scope	
+tests-py/queries/graphql_query/limits/select_query_article_limit_1.yaml	ported	limits_test.exs: limit 1, ordered by id desc, with the author
+tests-py/queries/graphql_query/limits/select_query_article_limit_2.yaml	ported	limits_test.exs: limit 2, ordered by id desc, with the author
+tests-py/queries/graphql_query/limits/select_query_article_limit_null.yaml	ported	limits_test.exs: no limit returns every row
+tests-py/queries/graphql_query/limits/select_query_article_neg_limit_error.yaml	ported	limits_test.exs: a negative limit is an error
+tests-py/queries/graphql_query/limits/select_query_article_string_limit_error.yaml	out_of_scope	
+tests-py/queries/graphql_query/limits/setup.yaml	out_of_scope	
+tests-py/queries/graphql_query/limits/teardown.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/anonymous_can_only_get_published_articles.yaml	ported	row_filters_test.exs: anonymous: an input filter for unpublished articles finds none
+tests-py/queries/graphql_query/permissions/anonymous_can_only_get_published_articles_v1alpha1.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/artist_search_tracks.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/artist_search_tracks_aggregate.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/artist_select_query_Track.yaml	ported	session_variables_test.exs: an artist can only select their tracks
+tests-py/queries/graphql_query/permissions/artist_select_query_Track_fail.yaml	ported	session_variables_test.exs: without the header the read fails: missing session variable
+tests-py/queries/graphql_query/permissions/in_and_nin.yaml	ported	session_variables_test.exs: _in an array session variable, and an empty one
+tests-py/queries/graphql_query/permissions/iregex.yaml	ported	operators_test.exs: _iregex with a session variable
+tests-py/queries/graphql_query/permissions/jsonb_has_all.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/jsonb_has_any.yaml	ported	operators_test.exs: $has_keys_any with an array session variable
+tests-py/queries/graphql_query/permissions/reader_author.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/select_articles_without_required_headers.yaml	ported	session_variables_test.exs: a preload whose target permission needs a missing header fails
+tests-py/queries/graphql_query/permissions/setup.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/staff_passed_students.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/teardown.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/tutor_get_students.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/tutor_get_students_session.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/user_can_query_geometry_values_filter.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/user_can_query_geometry_values_filter_session_vars.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/user_can_query_jsonb_values_filter.yaml	ported	operators_test.exs: $has_key with a literal key
+tests-py/queries/graphql_query/permissions/user_can_query_jsonb_values_filter_session_vars.yaml	ported	operators_test.exs: $has_key with a session variable
+tests-py/queries/graphql_query/permissions/user_can_query_other_users_published_articles.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/user_cannot_access_remarks_col.yaml	ported	columns_test.exs: the user role cannot read remarks_internal
+tests-py/queries/graphql_query/permissions/user_query_auction.yaml	divergence	operators_test.exs: $cgt compares two columns
+tests-py/queries/graphql_query/permissions/user_select_query_article_author.yaml	out_of_scope	
+tests-py/queries/graphql_query/permissions/user_select_query_unpublished_articles.yaml	ported	row_filters_test.exs: user: an input filter finds only its own unpublished article, with its author
+tests-py/queries/graphql_query/permissions/user_should_not_be_able_to_access_books_by_pk.yaml	out_of_scope	

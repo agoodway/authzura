@@ -84,10 +84,12 @@ entirely.
   permission filters), computed fields (in filters or as
   selectable outputs), column-comparison operators (`_ceq` and related),
   `_cast`, function permissions, actions and subscriptions are not
-  supported, and there are no plans to support inherited roles or computed
-  fields.
+  supported.
   - A *select* permission that depends on one of these is **denied**, not
-    ignored.
+    ignored. The one exception is a select permission's `computed_fields`
+    grant: it is ignored with a `:warning` diagnostic and the rest of the
+    permission is enforced. Computed fields are never exposed, and a filter
+    that references one is still denied.
   - Settings that only matter for writes, such as `backend_only`, `check`
     and `set`, are parsed and stored. A problem in a write-only setting
     produces a write-side warning and never denies a read.
