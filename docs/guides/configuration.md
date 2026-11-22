@@ -139,6 +139,29 @@ bounded error kind, never a raw database error.
 To check metadata before you depend on it, see
 [`mix authzura.check`](https://hexdocs.pm/authzura/Mix.Tasks.Authzura.Check.html).
 
+## Testing
+
+The version poll runs in the Store's own process. Under an Ecto SQL Sandbox
+that process owns no connection, so every poll fails, freshness is never
+renewed, and once `max_staleness` has passed every read returns
+`:stale_permissions`. A single test file usually finishes inside that window
+and passes; a long suite does not.
+
+For the test environment only, turn the poll off and keep the generation
+loaded at start authoritative for the run:
+
+```text
+config :my_app, MyApp.Authz, poll_interval: nil, max_staleness: :infinity
+```
+
+A test that changes metadata reloads explicitly with `Authzura.reload/1`
+from a process the sandbox allows (or in a shared-mode test).
+
+Never use this pair outside tests: with no poll and no staleness bound a
+revoked permission keeps being served until the next `Authzura.reload/1` or
+restart (see
+[Security](security.md#revocation-is-bounded-by-max_staleness)).
+
 ## Telemetry
 
 Events are emitted with `:telemetry`:

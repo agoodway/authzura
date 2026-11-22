@@ -158,9 +158,52 @@ defmodule Authzura.Options do
 
   @call NimbleOptions.new!(@call_schema)
 
-  # `filter_rows/3` applies no projection and runs nothing: only the instance
-  # and the root assertion apply.
-  @filter_rows NimbleOptions.new!(Keyword.take(@call_schema, [:instance, :table]))
+  @filter_rows_root_field [
+    type: {:in, [:select, :select_by_pk, false]},
+    default: :select,
+    doc:
+      "The `root_fields` entry the permission must enable: `:select`, `:select_by_pk`, or `false` to skip the check. `false` is for a table reached only through a relationship embed, which needs a select permission but no root query field; the select permission, row filter and columns still apply."
+  ]
+
+  @filter_rows_relationship [
+    type: {:or, [{:custom, __MODULE__, :relationship, []}, nil]},
+    default: nil,
+    doc:
+      "`{parent, name}`: the read is reached through the Hasura relationship `name` of `parent` (an Ecto schema, a queryable, or a `{schema, table}` reference). The permission, row filter and columns are those of the relationship's target table for the role, as in Hasura, whatever table the queryable reads (a view of that table, say). The relationship is looked up in the loaded snapshot. A schema `parent` is read with its `@schema_prefix` (or the instance `default_prefix`); pass a `{schema, table}` reference for a parent read under a runtime prefix."
+  ]
+
+  @filter_rows_relationship_mapping [
+    type: {:or, [{:list, {:tuple, [:string, :string]}}, nil]},
+    default: nil,
+    doc:
+      "`[{local, remote}]` columns the relationship `name` must map. A relationship that maps other columns counts as missing (see `:missing_relationship`). Use it when the name comes from a request, so that it cannot select an unrelated relationship."
+  ]
+
+  @filter_rows_relationship_target [
+    type: {:or, [{:custom, __MODULE__, :relationship_target, []}, nil]},
+    default: nil,
+    doc:
+      "The table, or list of tables, the relationship `name` may target: `{schema, table}` references or Ecto schemas. A relationship that targets another table counts as missing (see `:missing_relationship`), so its permission never authorizes rows of a table it does not describe. Pass the table the queryable reads, plus the table a view presents when the queryable is that view. `nil` (the default) accepts any target. Use it with `:relationship_mapping` when the name comes from a request: two relationships of one parent can map the same columns to different tables."
+  ]
+
+  @filter_rows_missing_relationship [
+    type: {:in, [:error, :root]},
+    default: :error,
+    doc:
+      "When `parent` has no relationship `name` (or none that maps `:relationship_mapping` to a `:relationship_target`): `:error` (the default) returns `{:error, :forbidden}`, `:root` uses the permission of the queryable's own table. The returned permission's `table` tells the two outcomes apart. With `:root` a request-supplied name that matches nothing selects the queryable's own permission, so use `:error` unless that fallback is intended."
+  ]
+
+  # `filter_rows/3` applies no projection and runs nothing: only the instance,
+  # the root assertion, the relationship and the root field it needs apply.
+  @filter_rows NimbleOptions.new!(
+                 @call_schema
+                 |> Keyword.take([:instance, :table])
+                 |> Keyword.put(:root_field, @filter_rows_root_field)
+                 |> Keyword.put(:relationship, @filter_rows_relationship)
+                 |> Keyword.put(:relationship_mapping, @filter_rows_relationship_mapping)
+                 |> Keyword.put(:relationship_target, @filter_rows_relationship_target)
+                 |> Keyword.put(:missing_relationship, @filter_rows_missing_relationship)
+               )
 
   # The same schema with `:columns` accepting any list: `call!/1` uses it only
   # once a guard walk has found every column an atom or a string, because
@@ -244,12 +287,59 @@ defmodule Authzura.Options do
 
   @doc """
   Validates the options of `Authzura.filter_rows/3`, raising
-  `NimbleOptions.ValidationError`. Only `:instance` and `:table` apply.
+  `NimbleOptions.ValidationError`. Only `:instance`, `:table`, `:root_field`,
+  `:relationship`, `:relationship_mapping`, `:relationship_target` and
+  `:missing_relationship` apply.
 
   #{NimbleOptions.docs(@filter_rows)}
   """
   @spec filter_rows!(keyword()) :: keyword()
   def filter_rows!(opts), do: NimbleOptions.validate!(opts, @filter_rows)
+
+  @doc false
+  # `{parent, name}`: `parent` is a `{schema, table}` reference, an Ecto schema or a queryable.
+  @spec relationship(term()) :: {:ok, {term(), String.t()}} | {:error, String.t()}
+  def relationship({parent, name} = relationship) when is_binary(name) do
+    if parent?(parent),
+      do: {:ok, relationship},
+      else:
+        {:error,
+         "expected the parent to be a {schema, table} reference, an Ecto schema or a queryable, got: #{inspect(parent)}"}
+  end
+
+  def relationship(other),
+    do: {:error, "expected {parent, name} with a string name, got: #{inspect(other)}"}
+
+  @doc false
+  # One table reference or Ecto schema, or a non-empty list of them.
+  @spec relationship_target(term()) :: {:ok, term()} | {:error, String.t()}
+  def relationship_target([_ | _] = targets) do
+    if Enum.all?(targets, &table?/1),
+      do: {:ok, targets},
+      else: relationship_target_error(targets)
+  end
+
+  def relationship_target(target) do
+    if table?(target), do: {:ok, target}, else: relationship_target_error(target)
+  end
+
+  defp relationship_target_error(target),
+    do:
+      {:error,
+       "expected a {schema, table} reference, an Ecto schema or a non-empty list of them, got: #{inspect(target)}"}
+
+  defp parent?(parent), do: table?(parent) or queryable?(parent)
+
+  defp table?({schema, table}), do: is_binary(schema) and is_binary(table)
+  defp table?(module) when is_atom(module) and not is_nil(module), do: ecto_schema?(module)
+  defp table?(_other), do: false
+
+  defp queryable?(nil), do: false
+  defp queryable?(module) when is_atom(module), do: false
+  defp queryable?(queryable), do: not is_nil(Ecto.Queryable.impl_for(queryable))
+
+  defp ecto_schema?(module),
+    do: Code.ensure_loaded?(module) and function_exported?(module, :__schema__, 1)
 
   defp schema(opts), do: opts |> named_columns?() |> schema_for()
 

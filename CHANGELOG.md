@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `root_field:` option of `Authzura.filter_rows/3` (`:select` by default,
+  `:select_by_pk`, or `false`). `false` skips the `root_fields` check for a table
+  reached only through a relationship embed; the select permission, row filter
+  and columns still apply.
 - `Authzura.Scope.root_field/2` checks `:select_aggregate`: a root aggregate
   read needs `select_aggregate` in the permission's `root_fields`.
 - The PgRest example (test only) is a single `authorize_query/5` built on

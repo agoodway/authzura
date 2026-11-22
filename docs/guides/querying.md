@@ -187,7 +187,45 @@ them only by name, and only if the repo can decode them.
 
 Every other check of `scope/3` applies (readiness, denials, `root_fields`,
 prefix pinning, session variables), and so does its telemetry span, marked
-`mode: :filter_rows`. Only the `:instance` and `:table` options apply.
+`mode: :filter_rows`. Only the `:instance`, `:table`, `:root_field`,
+`:relationship`, `:relationship_mapping`, `:relationship_target` and
+`:missing_relationship` options apply.
+
+`root_field:` is `:select` (the default), `:select_by_pk` or `false`. With
+`false` the `root_fields` check is skipped, for a table reached only through a
+relationship embed, which needs a select permission but no root query field.
+A role without a select permission is still `:forbidden`, and the row filter
+and columns still apply.
+
+### Authorizing an embed by its relationship
+
+Hasura authorizes a relationship by the select permission of the
+relationship's target table, not by whatever table answers the read. An
+integration that embeds rows from a view (or any other table) under a parent
+can apply that rule with `relationship: {parent, name}`: the role's
+permission, row filter, columns and limit become those of the target of the
+relationship `name` of `parent`, looked up in the loaded snapshot. The query
+root, prefix and alias stay the caller's, so the queryable must have the
+columns the target's row filter reads (Postgres raises otherwise, which fails
+closed).
+
+- `relationship_mapping: [{local, remote}]`: the relationship must map exactly
+  these columns.
+- `relationship_target:`: a `{schema, table}` reference, an Ecto schema, or a
+  list of them. The relationship must target one of these tables: the table
+  the queryable reads, plus the table it presents when it is a view. Two
+  relationships of one parent can map the same columns to different tables,
+  so the mapping alone cannot keep one table's permission off another table's
+  rows.
+- `missing_relationship:` decides what happens when no relationship of that
+  name maps those columns to one of those targets: `:error` (the default)
+  returns `{:error, :forbidden}`, `:root` uses the queryable's own permission.
+  The returned permission's `table` tells the two apart.
+
+When the name comes from a request, pass the mapping and the target, and
+prefer `:error`: with `:root`, a name that matches nothing selects the
+queryable's own permission. A role with no permission on the target is
+`:forbidden` even if the queryable's own table grants it.
 
 ## Asking what a role may do
 

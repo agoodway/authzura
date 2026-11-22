@@ -182,7 +182,7 @@ defmodule Authzura.Scope do
   def filter_rows(queryable, %Session{} = session, %Generation{} = generation, opts) do
     with {:ok, query, %{permission: permission} = target} <-
            resolve(queryable, session, generation, opts, :scope),
-         :ok <- root_field(permission),
+         :ok <- root_field(permission, Keyword.get(opts, :root_field, :select)),
          :ok <- no_combinations(query),
          {:ok, query} <-
            scope_query(query, target, {session, generation}, root_bounds([]), :filter_only),
@@ -237,10 +237,87 @@ defmodule Authzura.Scope do
     with :ok <- QueryShape.validate(query, mode),
          root = root_ref(query, generation),
          :ok <- assert_table(root, Keyword.get(opts, :table)),
-         {:ok, target} <- target(generation, session, root, schema(query)) do
+         {:ok, permission_ref} <- permission_ref(root, generation, opts),
+         {:ok, target} <- target(generation, session, root, permission_ref, schema(query)) do
       {:ok, query, target}
     end
   end
+
+  # The table whose permission governs a read: the root, or the target of the Hasura
+  # relationship the read is reached through (`relationship: {parent, name}`). The target is
+  # read from the snapshot's relationships, which are built when a generation is loaded, so a
+  # request does two map lookups for it.
+  defp permission_ref(root, generation, opts) do
+    case Keyword.get(opts, :relationship) do
+      nil ->
+        {:ok, root}
+
+      {parent, name} ->
+        targets = targets(Keyword.get(opts, :relationship_target), generation)
+        relationship_ref(root, parent_ref(parent, generation), name, targets, generation, opts)
+    end
+  end
+
+  # The tables a relationship may target (`relationship_target:`), or `nil` for any.
+  defp targets(nil, _generation), do: nil
+
+  defp targets(targets, generation) when is_list(targets),
+    do: Enum.map(targets, &table_ref(&1, generation))
+
+  defp targets(target, generation), do: [table_ref(target, generation)]
+
+  defp table_ref({schema, name} = ref, _generation) when is_binary(schema) and is_binary(name),
+    do: ref
+
+  defp table_ref(schema, %Generation{config: %{default_prefix: default}}) when is_atom(schema),
+    do:
+      {Enum.find([schema.__schema__(:prefix), default], &is_binary/1), schema.__schema__(:source)}
+
+  # The parent option is validated (`Authzura.Options.relationship/1`): a table reference, an
+  # Ecto schema or a queryable.
+  defp parent_ref({schema, name} = ref, generation) when is_binary(schema) and is_binary(name),
+    do: table_ref(ref, generation)
+
+  defp parent_ref(schema, generation) when is_atom(schema), do: table_ref(schema, generation)
+
+  defp parent_ref(parent, generation), do: parent |> Queryable.to_query() |> root_ref(generation)
+
+  defp relationship_ref(
+         root,
+         parent_ref,
+         name,
+         targets,
+         %Generation{snapshot: %Snapshot{tables: tables}},
+         opts
+       ) do
+    case tables do
+      %{
+        ^parent_ref => %Table{
+          relationships: %{^name => %Relationship{target: ref} = relationship}
+        }
+      } ->
+        (same_mapping(relationship, Keyword.get(opts, :relationship_mapping)) and
+           target?(ref, targets) and {:ok, ref}) ||
+          missing_relationship(Keyword.get(opts, :missing_relationship, :error), root)
+
+      _no_relationship ->
+        missing_relationship(Keyword.get(opts, :missing_relationship, :error), root)
+    end
+  end
+
+  # A relationship found by a caller-supplied name must map the columns the caller expects and
+  # target a table the caller reads, so that a name cannot select the permission of a table
+  # whose rows are not the ones read.
+  defp same_mapping(_relationship, nil), do: true
+
+  defp same_mapping(%Relationship{mapping: mapping}, expected),
+    do: Enum.sort(mapping) == Enum.sort(expected)
+
+  defp target?(_ref, nil), do: true
+  defp target?(ref, targets), do: ref in targets
+
+  defp missing_relationship(:root, root), do: {:ok, root}
+  defp missing_relationship(:error, _root), do: {:error, :forbidden}
 
   @doc """
   The physical `{prefix, source}` root of `query`, whose `from` must be a
@@ -272,9 +349,9 @@ defmodule Authzura.Scope do
   defp assert_table(root, root), do: :ok
   defp assert_table(_root, _table), do: {:error, {:unsupported_query, :table_mismatch}}
 
-  defp target(generation, %Session{role: role}, root, schema) do
+  defp target(generation, %Session{role: role}, root, permission_ref, schema) do
     with {:ok, %{template: {permission, _filter}, table: table, admin?: admin?}} <-
-           Generation.access(generation, role, root),
+           Generation.access(generation, role, permission_ref),
          do: {:ok, target(root, table, schema, permission, admin?)}
   end
 
@@ -287,12 +364,14 @@ defmodule Authzura.Scope do
   the default) needs `select`; a read by primary key (`:select_by_pk`, for
   `Authzura.get/4`) needs `select_by_pk` or `select`; a root aggregate read
   (`:select_aggregate`) needs `select_aggregate`. The admin role's synthesized
-  permission keeps the default `root_fields: :all`.
+  permission keeps the default `root_fields: :all`. `false` skips the check: the
+  read needs the table's select permission but no root query field.
   """
-  @spec root_field(Permission.t(), :select | :select_by_pk | :select_aggregate) ::
+  @spec root_field(Permission.t(), :select | :select_by_pk | :select_aggregate | false) ::
           :ok | {:error, :root_field_disabled}
   def root_field(permission, read \\ :select)
 
+  def root_field(_permission, false), do: :ok
   def root_field(%Permission{root_fields: :all}, _read), do: :ok
 
   def root_field(%Permission{root_fields: fields}, :select) when is_list(fields),

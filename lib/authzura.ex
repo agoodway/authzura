@@ -248,8 +248,42 @@ defmodule Authzura do
   Every other check of `scope/3` applies (readiness, access, `root_fields`
   allowing `select`, prefix pinning, `table:`, query shape, session
   variables), so the denials are those of `scope/3`. The configured admin role gets no filter
-  and a synthesized permission. Only the `:instance` and `:table` options
-  apply; any other raises `NimbleOptions.ValidationError`.
+  and a synthesized permission. Only the `:instance`, `:table`, `:root_field`,
+  `:relationship`, `:relationship_mapping`, `:relationship_target` and `:missing_relationship`
+  options apply; any other raises `NimbleOptions.ValidationError`.
+
+  `relationship: {parent, name}` authorizes the read as Hasura authorizes the relationship `name`
+  of `parent` (an Ecto schema, a queryable or a `{schema, table}` reference): the role's select permission,
+  row filter, columns and limit are those of the relationship's target table, whatever table
+  `queryable` reads, so a view of that table cannot grant more than the relationship does. The
+  target comes from the loaded snapshot's relationships. A `parent` without that relationship
+  is `{:error, :forbidden}`, or with `missing_relationship: :root` is authorized by
+  `queryable`'s own table. With `relationship_mapping: [{local, remote}]` the relationship must
+  map exactly those columns, and with `relationship_target:` (a `{schema, table}` reference, an
+  Ecto schema, or a list of them) it must target one of those tables, or it counts as missing.
+  Pass both when `name` comes from a request: two relationships of one parent can map the same
+  columns to different tables, and only a target check keeps one table's permission from
+  authorizing another table's rows. The returned permission's `table` is the relationship's
+  target, or `queryable`'s own table after the `:root` fallback. `queryable` must have the
+  columns the target's row filter reads.
+
+      {:ok, query, permission} =
+        Authzura.filter_rows(MyApp.PublishedPost, session,
+          root_field: false,
+          relationship: {MyApp.User, "posts"},
+          relationship_mapping: [{"id", "author_id"}],
+          relationship_target: [MyApp.PublishedPost, {"public", "posts"}]
+        )
+
+  `root_field:` names the `root_fields` entry the permission must enable:
+  `:select` (the default), `:select_by_pk`, or `false`. With `false` the
+  `root_fields` check is skipped, for a table reached only through a
+  relationship embed, which needs a select permission but no root query
+  field. Everything else still applies: a role without a select permission
+  is `:forbidden`, and the row filter and columns are those of the permission.
+
+      {:ok, query, permission} =
+        Authzura.filter_rows(MyApp.Comment, session, root_field: false)
 
   Emits the `[:authzura, :scope]` span with `mode: :filter_rows` in its
   metadata. There is no bang variant, as the result is a three-element tuple.

@@ -103,6 +103,45 @@ defmodule Authzura.Integration.FilterRowsTest do
     end
   end
 
+  describe "root_field:" do
+    test "defaults to requiring the select root field", %{instance: i} do
+      session = HasuraFixture.session!("noroot")
+
+      assert Authzura.filter_rows(Article, session, instance: i) == {:error, :root_field_disabled}
+
+      assert Authzura.filter_rows(Article, session, instance: i, root_field: :select) ==
+               {:error, :root_field_disabled}
+    end
+
+    test "false filters rows without a root field, keeping the permission", %{instance: i} do
+      assert {:ok, %Query{} = filtered, %Permission{columns: ["id"]}} =
+               Authzura.filter_rows(Article, HasuraFixture.session!("noroot"),
+                 instance: i,
+                 root_field: false
+               )
+
+      assert ids(Repo.all(filtered)) == [1, 2, 3]
+
+      assert {:ok, mine, %Permission{columns: ["id", "title"]}} =
+               Authzura.filter_rows(Article, user(1), instance: i, root_field: false)
+
+      assert ids(Repo.all(mine)) == [1, 2]
+    end
+
+    test "false still denies a role without a select permission", %{instance: i} do
+      assert Authzura.filter_rows(Article, HasuraFixture.session!("nobody"),
+               instance: i,
+               root_field: false
+             ) == {:error, :forbidden}
+    end
+
+    test "rejects an invalid value", %{instance: i} do
+      assert_raise NimbleOptions.ValidationError, ~r/invalid value for :root_field option/, fn ->
+        Authzura.filter_rows(Article, user(1), instance: i, root_field: :select_aggregate)
+      end
+    end
+  end
+
   test "unions are rejected: their branches cannot be enforced", %{instance: i} do
     branch = from(a in Article, where: a.id > 1)
 
