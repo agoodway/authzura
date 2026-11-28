@@ -354,6 +354,29 @@ defmodule Authzura.StoreTest do
     end
   end
 
+  test "function checks are refused as stale once the generation goes stale", ctx do
+    TestSource.put(ctx.agent,
+      snapshot: %Snapshot{
+        snapshot(["user"])
+        | functions: %{{"public", "search"} => MapSet.new(["user"])}
+      }
+    )
+
+    start_ready(ctx)
+    session = Authzura.HasuraFixture.session!("user")
+    assert :ok = Authzura.authorize_function(session, "search", instance: ctx.instance)
+
+    advance(ctx, @max_staleness + 1)
+
+    assert {:error, :stale_permissions} =
+             Authzura.authorize_function(session, "search", instance: ctx.instance)
+
+    assert {:error, :stale_permissions} =
+             Authzura.function_roles("search", instance: ctx.instance)
+
+    refute Authzura.function_allowed?(session, "search", instance: ctx.instance)
+  end
+
   test "a killed Store is not ready even though its generation remains", ctx do
     store = start_ready(ctx, [], restart: :temporary)
     assert {:ok, _generation} = Store.current(ctx.instance)

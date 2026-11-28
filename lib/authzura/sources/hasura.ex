@@ -1,6 +1,6 @@
 defmodule Authzura.Sources.Hasura do
   @moduledoc """
-  Loads select permissions from Hasura v2 metadata in `hdb_catalog`.
+  Loads select permissions and function execute grants from Hasura v2 metadata in `hdb_catalog`.
 
   The catalog is only ever read. Options:
 
@@ -235,8 +235,8 @@ defmodule Authzura.Sources.Hasura do
 
   @doc false
   # The snapshot assembly shared by `load/1` and the sandboxed test fixture:
-  # relationships and permission translation over already-introspected
-  # tables. Validation is the Store's job (`Authzura.Validator`).
+  # relationship, permission and function-grant translation over
+  # already-introspected tables. Validation is the Store's job (`Authzura.Validator`).
   @spec build_snapshot(term(), String.t(), Metadata.tables(), [map()], module(), term()) ::
           Snapshot.t()
   def build_snapshot(json, source_name, tables, fks, adapter, version) do
@@ -244,12 +244,14 @@ defmodule Authzura.Sources.Hasura do
       Metadata.resolve_relationships(json, source_name, tables, fks)
 
     {permissions, diagnostics} = Metadata.translate(json, source_name, tables, adapter)
+    {functions, function_diagnostics} = Metadata.translate_functions(json, source_name)
 
     %Snapshot{
       version: version,
       tables: tables,
       permissions: Map.new(permissions, &{{&1.role, &1.table, &1.operation}, &1}),
-      diagnostics: relationship_diagnostics ++ diagnostics
+      functions: functions,
+      diagnostics: relationship_diagnostics ++ diagnostics ++ function_diagnostics
     }
   end
 

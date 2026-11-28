@@ -15,6 +15,7 @@ defmodule Authzura.Store.Generation do
 
   alias Authzura.AST
   alias Authzura.Model.{Permission, Snapshot, Table}
+  alias Authzura.Options
 
   @enforce_keys [
     :instance,
@@ -63,6 +64,43 @@ defmodule Authzura.Store.Generation do
         }
 
   @doc """
+  Whether `role` is the configured admin role: the one role that bypasses
+  permissions. `nil` never is, and neither is any role without one configured.
+  """
+  @spec admin_role?(Options.instance(), String.t() | nil) :: boolean()
+  def admin_role?(%{admin_role: role}, role) when is_binary(role), do: true
+  def admin_role?(_config, _role), do: false
+
+  @doc """
+  Whether `role` may execute the function `ref`: a role granted in the
+  snapshot, or the configured admin role on any tracked function. An untracked
+  function is never executable.
+  """
+  @spec function_allowed?(t(), String.t() | nil, Snapshot.function_ref()) :: boolean()
+  def function_allowed?(
+        %__MODULE__{config: config, snapshot: %Snapshot{functions: functions}},
+        role,
+        ref
+      ) do
+    case functions do
+      %{^ref => roles} -> admin_role?(config, role) or MapSet.member?(roles, role)
+      _untracked -> false
+    end
+  end
+
+  @doc """
+  The roles granted execute on the tracked function `ref`, sorted (the admin
+  role is not listed), or `:error` when `ref` is not tracked.
+  """
+  @spec function_roles(t(), Snapshot.function_ref()) :: {:ok, [String.t()]} | :error
+  def function_roles(%__MODULE__{snapshot: %Snapshot{functions: functions}}, ref) do
+    case functions do
+      %{^ref => roles} -> {:ok, roles |> MapSet.to_list() |> Enum.sort()}
+      _untracked -> :error
+    end
+  end
+
+  @doc """
   Returns `role`'s select access to the table `ref`: its non-denied
   template, the table, and whether `role` is the configured admin role. The
   admin role gets its prebuilt template from `admin` (every column, an
@@ -70,32 +108,25 @@ defmodule Authzura.Store.Generation do
   `{:error, :forbidden}`.
   """
   @spec access(t(), String.t(), Table.table_ref()) :: {:ok, access()} | {:error, :forbidden}
-  def access(
-        %__MODULE__{
-          config: %{admin_role: role},
-          admin: admin,
-          snapshot: %Snapshot{tables: tables}
-        },
-        role,
-        ref
-      )
-      when is_binary(role) do
-    with %{^ref => template} <- admin,
-         {:ok, table} <- Table.fetch(tables, ref) do
-      {:ok, %{template: template, table: table, admin?: true}}
+  def access(%__MODULE__{config: config} = generation, role, ref) do
+    admin? = admin_role?(config, role)
+
+    with {:ok, template} <- template(generation, role, ref, admin?),
+         {:ok, table} <- Table.fetch(generation.snapshot.tables, ref) do
+      {:ok, %{template: template, table: table, admin?: admin?}}
     else
       _missing -> {:error, :forbidden}
     end
   end
 
-  def access(%__MODULE__{templates: templates, snapshot: %Snapshot{tables: tables}}, role, ref) do
+  defp template(%__MODULE__{admin: admin}, _role, ref, true), do: Map.fetch(admin, ref)
+
+  defp template(%__MODULE__{templates: templates}, role, ref, false) do
     key = {role, ref}
 
-    with %{^key => {%Permission{}, _filter} = template} <- templates,
-         {:ok, table} <- Table.fetch(tables, ref) do
-      {:ok, %{template: template, table: table, admin?: false}}
-    else
-      _missing -> {:error, :forbidden}
+    case templates do
+      %{^key => {%Permission{}, _filter} = template} -> {:ok, template}
+      _missing -> :error
     end
   end
 end

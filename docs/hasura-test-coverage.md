@@ -189,8 +189,8 @@ Hasura select-permission-related tests that were reviewed and not ported.
 | Hasura source | Reason |
 |---|---|
 | `tests-py/queries/graphql_query/permissions/anonymous_can_only_get_published_articles_v1alpha1.yaml` | duplicate of the ported v1 file, on the GraphQL `v1alpha1` endpoint |
-| `tests-py/queries/graphql_query/permissions/artist_search_tracks.yaml`, `artist_search_tracks_aggregate.yaml` | tracked SQL functions, aggregates |
-| `tests-py/queries/graphql_query/permissions/staff_passed_students.yaml` | tracked SQL function |
+| `tests-py/queries/graphql_query/permissions/artist_search_tracks.yaml`, `artist_search_tracks_aggregate.yaml` | tracked SQL functions as query roots (execute grants are read, see `docs/hasura-differences.md` rows 18 and 20), aggregates |
+| `tests-py/queries/graphql_query/permissions/staff_passed_students.yaml` | tracked SQL function as a query root (see `docs/hasura-differences.md` rows 18 and 20) |
 | `tests-py/queries/graphql_query/permissions/reader_author.yaml` | computed field in a filter (denied by design, `test/authzura/sources/hasura/metadata_test.exs:325`) |
 | `tests-py/queries/graphql_query/permissions/tutor_get_students.yaml`, `tutor_get_students_session.yaml` | computed fields |
 | `tests-py/queries/graphql_query/permissions/user_can_query_geometry_values_filter.yaml`, `..._session_vars.yaml` | PostGIS operators, outside the stage-one operator set |

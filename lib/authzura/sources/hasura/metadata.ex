@@ -35,6 +35,20 @@ defmodule Authzura.Sources.Hasura.Metadata do
   diagnostics, and never touches a read. Roles listed in `inherited_roles`
   are denied with a diagnostic and get no permission.
 
+  ## Function permissions
+
+  `translate_functions/2` reads `sources[].functions[]` into explicit execute
+  grants per function and role. Only grants written in the metadata count;
+  Hasura's `infer_function_permissions` is not in the metadata and is not
+  applied, so Authzura follows the stricter rule. An inherited role is never
+  granted, and a function listed twice is granted to no role.
+
+  A grant is only the execute gate. The caller must still scope the rows a
+  function returns with the return table's select permission (for example
+  `Authzura.filter_rows/3`) and supply session arguments itself. A function
+  tracked with `exposed_as: "mutation"` is reported like any other; the
+  library is read-only and does not record how a function is exposed.
+
   Computed fields are not implemented. A select permission's
   `computed_fields` grant (a list of names) is ignored with a `:warning`
   diagnostic, `{:unsupported, :computed_fields}`, and the rest of the
@@ -44,7 +58,7 @@ defmodule Authzura.Sources.Hasura.Metadata do
   permission is denied.
   """
 
-  alias Authzura.Model.{Diagnostic, Permission, Relationship, Table}
+  alias Authzura.Model.{Diagnostic, Permission, Relationship, Snapshot, Table}
   alias Authzura.Sources.Hasura.BoolExp
   alias Authzura.Util
 
@@ -139,6 +153,94 @@ defmodule Authzura.Sources.Hasura.Metadata do
     with_source(metadata, source_name, {[], []}, &translate_source(metadata, &1, tables, adapter))
   end
 
+  @doc """
+  Translates the `functions` of `source_name` into explicit execute grants:
+  a map from function reference `{schema, name}` to the `MapSet` of roles
+  listed in its `permissions`, plus the diagnostics.
+
+  A function is a string name or a `%{"schema", "name"}` object (schema
+  defaults to `"public"`). Every tracked function appears, with an empty set
+  when nothing is granted. Anything malformed becomes a `:deny` diagnostic
+  naming the function, and its grant is left out. An unknown source
+  translates nothing. See the module doc, "Function permissions".
+  """
+  @spec translate_functions(term(), String.t()) ::
+          {%{Snapshot.function_ref() => MapSet.t(String.t())}, [Diagnostic.t()]}
+  def translate_functions(metadata, source_name) do
+    {inherited, _diagnostics} = inherited_roles(metadata)
+
+    with_source(metadata, source_name, {%{}, []}, fn source ->
+      indexed =
+        source |> list("functions") |> Enum.map(&entry(&1, "function")) |> Enum.with_index()
+
+      refs = for {{ref, _entry}, _index} <- indexed, do: ref
+      counts = Enum.frequencies(refs)
+
+      {functions, diagnostics} =
+        Enum.reduce(indexed, {%{}, []}, &function_entry(&1, &2, counts, inherited))
+
+      {functions, Enum.reverse(diagnostics)}
+    end)
+  end
+
+  # A function listed twice is ambiguous: it gets no grants (a `:deny`
+  # diagnostic at each repeat), as a table listed twice gets no permission.
+  defp function_entry({:invalid, index}, {functions, denied}, _counts, _inherited),
+    do: {functions, [function_deny(:invalid_function, ["functions", "#{index}"]) | denied]}
+
+  defp function_entry({{ref, entry}, index}, {functions, denied}, counts, inherited) do
+    path = ["functions", "#{index}"]
+    {granted, diagnostics} = function_grants(entry, ref, path, inherited)
+
+    case counts do
+      %{^ref => 1} ->
+        {Map.put(functions, ref, granted), diagnostics ++ denied}
+
+      _repeated ->
+        {Map.put(functions, ref, MapSet.new()),
+         diagnostics ++ duplicate_function(functions, ref, path) ++ denied}
+    end
+  end
+
+  defp duplicate_function(functions, ref, path) when is_map_key(functions, ref),
+    do: [function_deny(:duplicate_function, path, ref)]
+
+  defp duplicate_function(_functions, _ref, _path), do: []
+
+  # Grants and the diagnostics (newest first) of one function entry.
+  defp function_grants(%{"permissions" => permissions}, ref, path, inherited)
+       when is_list(permissions) do
+    permissions
+    |> Enum.with_index()
+    |> Enum.reduce({MapSet.new(), []}, fn {permission, index}, {granted, denied} ->
+      case function_role(permission, inherited) do
+        {:ok, role} ->
+          {MapSet.put(granted, role), denied}
+
+        {:error, role, reason} ->
+          diagnostic = function_deny(reason, path ++ ["permissions", "#{index}"], ref, role)
+          {granted, [diagnostic | denied]}
+      end
+    end)
+  end
+
+  defp function_grants(%{"permissions" => _permissions}, ref, path, _inherited),
+    do:
+      {MapSet.new(), [function_deny(:invalid_function_permissions, path ++ ["permissions"], ref)]}
+
+  defp function_grants(_entry, _ref, _path, _inherited), do: {MapSet.new(), []}
+
+  defp function_deny(reason, path, ref \\ nil, role \\ nil),
+    do: %{deny(reason, path) | function: ref, role: role}
+
+  defp function_role(%{"role" => role}, inherited) when is_binary(role) do
+    if MapSet.member?(inherited, role),
+      do: {:error, role, {:unsupported, :inherited_role}},
+      else: {:ok, role}
+  end
+
+  defp function_role(_permission, _inherited), do: {:error, nil, :invalid_function_permission}
+
   # Source and table entries.
 
   defp source(%{"sources" => sources}, name) when is_list(sources) do
@@ -163,17 +265,20 @@ defmodule Authzura.Sources.Hasura.Metadata do
 
   defp valid_entries(entries), do: for({_ref, _entry} = valid <- entries, do: valid)
 
-  defp entries(%{"tables" => tables}) when is_list(tables), do: Enum.map(tables, &entry/1)
+  defp entries(%{"tables" => tables}) when is_list(tables),
+    do: Enum.map(tables, &entry(&1, "table"))
+
   defp entries(_source), do: []
 
-  defp entry(%{"table" => table} = entry) do
-    case BoolExp.table_ref(table) do
+  # An entry whose `key` holds a valid reference: `{ref, entry}`, else `:invalid`.
+  defp entry(%{} = entry, key) do
+    case BoolExp.table_ref(Map.get(entry, key)) do
       {:ok, ref} -> {ref, entry}
       :error -> :invalid
     end
   end
 
-  defp entry(_entry), do: :invalid
+  defp entry(_entry, _key), do: :invalid
 
   defp list(map, key) do
     case Map.get(map, key) do

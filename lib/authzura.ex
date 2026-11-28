@@ -16,7 +16,7 @@ defmodule Authzura do
   | enforce columns and the row limit yourself (integration primitive) | `filter_rows/3` |
   | have Authzura run the read | `all/3`, `one/3`, `get/4` (and the `!` variants) |
   | accept untrusted, Hasura-shaped (JSON) input | `scope_input/4`, `all_input/4` |
-  | inspect what a role may do | `permission/3`, `allowed_columns/3`, `validate_columns/4` |
+  | inspect what a role may do | `permission/3`, `allowed_columns/3`, `validate_columns/4`, `authorize_function/3`, `function_allowed?/3`, `function_roles/2` |
   | check readiness and freshness | `status/1`, `diagnostics/1`, `reload/1` |
 
   Prefer the executors (`all/3`, `one/3`, `get/4`, `all_input/4`): they run
@@ -87,7 +87,8 @@ defmodule Authzura do
   """
 
   alias Authzura.{Error, Executor, Get, Input, Options, Plan, Scope, Session, Store, Telemetry}
-  alias Authzura.Model.{Diagnostic, Permission}
+  alias Authzura.Model.{Diagnostic, Permission, Snapshot}
+  alias Authzura.Store.Generation
   alias Ecto.{Query, Queryable}
 
   @doc """
@@ -343,6 +344,98 @@ defmodule Authzura do
     with {:ok, %Permission{columns: columns}} <- permission(session, queryable, opts),
          do: {:ok, columns}
   end
+
+  @typedoc """
+  A function reference: a name in the instance's `default_prefix`, or
+  `{schema, name}`.
+  """
+  @type function_ref :: String.t() | Snapshot.function_ref()
+
+  @doc """
+  Checks that the session's role may execute the tracked function
+  `function_ref`: `:ok`, or `{:error, :forbidden}`. An instance not yet
+  loaded is `{:error, :not_ready}` and an unconfirmed generation
+  `{:error, :stale_permissions}`, so a caller can tell a retryable outage (503)
+  from a denial (403), as with `validate_columns/4`.
+
+  The answer comes from the active generation, with no query. It is `:ok` only
+  for a role granted in the function's metadata `permissions`, or for the
+  configured admin role on a tracked function. An untracked function, a role
+  without a grant (including a `nil` role) and a malformed reference are all
+  `{:error, :forbidden}`. A bare name resolves under the instance
+  `default_prefix`, while metadata bare names mean `"public"`; pass a
+  `{schema, name}` tuple when `default_prefix` is not `"public"`. Only
+  `instance:` matters.
+
+  This is **only the execute gate**. Authzura neither runs the function nor
+  fills in its session arguments. The caller must still scope the rows it
+  returns with the select permission of the function's return table (for
+  example `filter_rows/3`), and pass session arguments itself.
+
+  Only explicit grants count; see `Authzura.Sources.Hasura.Metadata`.
+
+      :ok = Authzura.authorize_function(session, {"public", "search_articles"})
+      {:error, :forbidden} = Authzura.authorize_function(session, "unknown_fn")
+  """
+  @spec authorize_function(Session.t(), function_ref(), keyword()) ::
+          :ok | {:error, :forbidden | Store.unavailable()}
+  def authorize_function(%Session{role: role}, function_ref, opts \\ []) do
+    opts = Options.call!(opts)
+
+    with {:ok, generation} <- current(opts),
+         {:ok, ref} <- function_ref(function_ref, generation),
+         true <- Generation.function_allowed?(generation, role, ref) do
+      :ok
+    else
+      {:error, _reason} = error -> error
+      false -> {:error, :forbidden}
+    end
+  end
+
+  @doc """
+  Whether `authorize_function/3` returns `:ok`. It fails closed: not ready,
+  stale, untracked and refused are all `false`; use `authorize_function/3` to
+  tell them apart.
+
+      Authzura.function_allowed?(session, "search_articles")
+      #=> true
+  """
+  @spec function_allowed?(Session.t(), function_ref(), keyword()) :: boolean()
+  def function_allowed?(%Session{} = session, function_ref, opts \\ []),
+    do: authorize_function(session, function_ref, opts) == :ok
+
+  @doc """
+  Returns the roles granted execute on the tracked function `function_ref`,
+  sorted: `{:ok, ["editor", "user"]}`. The admin role is not listed, as it may
+  execute any tracked function.
+
+  An untracked function and a malformed reference are `{:error, :forbidden}`,
+  as an unknown table is; an instance not yet loaded or out of date is
+  `{:error, :not_ready}` or `{:error, :stale_permissions}`. Only `instance:`
+  matters.
+  """
+  @spec function_roles(function_ref(), keyword()) ::
+          {:ok, [String.t()]} | {:error, :forbidden | Store.unavailable()}
+  def function_roles(function_ref, opts \\ []) do
+    opts = Options.call!(opts)
+
+    with {:ok, generation} <- current(opts),
+         {:ok, ref} <- function_ref(function_ref, generation),
+         {:ok, roles} <- Generation.function_roles(generation, ref) do
+      {:ok, roles}
+    else
+      {:error, _reason} = error -> error
+      :error -> {:error, :forbidden}
+    end
+  end
+
+  defp function_ref({schema, name} = ref, _generation) when is_binary(schema) and is_binary(name),
+    do: {:ok, ref}
+
+  defp function_ref(name, %Generation{config: %{default_prefix: prefix}}) when is_binary(name),
+    do: {:ok, {prefix, name}}
+
+  defp function_ref(_function_ref, _generation), do: {:error, :forbidden}
 
   @doc """
   Checks that the session's role may select every one of `columns` (field

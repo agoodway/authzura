@@ -14,6 +14,8 @@ defmodule Mix.Tasks.Authzura.Check do
 
       severity role schema.table operation path: reason
 
+  A function diagnostic prints `fn:schema.name` in the table position.
+
   Parts a diagnostic does not carry print as `-`. The last line counts the
   tables, select permissions, denials and warnings. No metadata is printed.
 
@@ -29,7 +31,7 @@ defmodule Mix.Tasks.Authzura.Check do
   Example output:
 
       deny editor public.users select filter.nonexistent: {:unknown_field, "nonexistent"}
-      2 tables, 2 select permissions, 1 denied, 0 warnings
+      2 tables, 2 select permissions, 0 functions, 1 denied, 0 warnings
 
   Run it against your real metadata before you depend on it, and in CI after
   every metadata change.
@@ -149,23 +151,33 @@ defmodule Mix.Tasks.Authzura.Check do
          severity: severity,
          role: role,
          table: table,
+         function: function,
          operation: operation,
          path: path,
          reason: reason
        }) do
-    "#{severity} #{part(role)} #{table(table)} #{part(operation)} #{path(path)}: #{inspect(reason)}"
+    "#{severity} #{part(role)} #{target(table, function)} #{part(operation)} #{path(path)}: #{inspect(reason)}"
   end
 
   defp part(nil), do: "-"
   defp part(value), do: to_string(value)
 
-  defp table(nil), do: "-"
-  defp table({schema, name}), do: "#{schema}.#{name}"
+  # A table prints as `schema.name`, a function as `fn:schema.name`.
+  defp target(nil, nil), do: "-"
+  defp target(nil, function), do: "fn:" <> ref(function)
+  defp target(table, _function), do: ref(table)
+
+  defp ref({schema, name}), do: "#{schema}.#{name}"
 
   defp path([]), do: "-"
   defp path(path), do: Enum.join(path, ".")
 
-  defp summary(%Snapshot{tables: tables, permissions: permissions, diagnostics: diagnostics}) do
+  defp summary(%Snapshot{
+         tables: tables,
+         permissions: permissions,
+         functions: functions,
+         diagnostics: diagnostics
+       }) do
     selects =
       permissions |> Map.values() |> Enum.filter(&match?(%Permission{operation: :select}, &1))
 
@@ -173,6 +185,6 @@ defmodule Mix.Tasks.Authzura.Check do
     warnings = Enum.count(diagnostics, &match?(%Diagnostic{severity: :warning}, &1))
 
     "#{map_size(tables)} tables, #{length(selects)} select permissions, " <>
-      "#{denied} denied, #{warnings} warnings"
+      "#{map_size(functions)} functions, #{denied} denied, #{warnings} warnings"
   end
 end

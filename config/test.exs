@@ -10,7 +10,9 @@ repo_opts = [
   port: port,
   database: database,
   pool: Ecto.Adapters.SQL.Sandbox,
-  pool_size: 10
+  # Every async DataCase test holds a sandbox connection, and ExUnit runs
+  # `2 * schedulers` cases at once, so the pool matches that concurrency.
+  pool_size: System.schedulers_online() * 2
 ]
 
 config :authzura, Authzura.Test.Repo, repo_opts

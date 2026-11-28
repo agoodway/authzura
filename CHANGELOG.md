@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Function execute permissions. `Authzura.Sources.Hasura.Metadata.translate_functions/2`
+  reads `sources[].functions[]` (a string name or `{schema, name}` object, schema
+  `"public"` by default, `permissions: [{role: ...}]`) into the new
+  `Authzura.Model.Snapshot` `functions` field: `{schema, name}` to the `MapSet` of
+  granted roles. `Authzura.authorize_function/3` (`:ok` or `{:error, :forbidden | :not_ready |
+  :stale_permissions}`), its boolean form `Authzura.function_allowed?/3` and
+  `Authzura.function_roles/2` answer from the active generation (the admin role
+  may execute any tracked function). A function listed twice is granted to no
+  role (`:duplicate_function`). Only explicit grants count, so Hasura's
+  `infer_function_permissions` (a server setting, not in the metadata) is never
+  applied. Malformed entries are `:deny` diagnostics carrying the new
+  `Authzura.Model.Diagnostic` `function` field.
 - `root_field:` option of `Authzura.filter_rows/3` (`:select` by default,
   `:select_by_pk`, or `false`). `false` skips the `root_fields` check for a table
   reached only through a relationship embed; the select permission, row filter

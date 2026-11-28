@@ -57,4 +57,23 @@ defmodule Authzura.Integration.StoreReloadTest do
 
     assert Authzura.all("store_reload_probe", session, instance: instance) == {:error, :forbidden}
   end
+
+  test "a function grant change reloads through the metadata version", %{instance: instance} do
+    session = HasuraFixture.session!("user")
+    refute Authzura.function_allowed?(session, "probe_fn", instance: instance)
+
+    granted =
+      HasuraFixture.metadata([%{table: @probe}],
+        functions: [HasuraFixture.function_grants("probe_fn", ["user"])]
+      )
+
+    HasuraFixture.put_metadata!(Repo, granted, 2)
+    assert :ok = Store.poll(instance)
+    assert Authzura.function_allowed?(session, "probe_fn", instance: instance)
+
+    # Same resource_version, different document: the digest moves the version.
+    HasuraFixture.put_metadata!(Repo, HasuraFixture.metadata([%{table: @probe}]), 2)
+    assert :ok = Store.poll(instance)
+    refute Authzura.function_allowed?(session, "probe_fn", instance: instance)
+  end
 end

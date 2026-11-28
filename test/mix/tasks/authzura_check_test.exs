@@ -73,7 +73,7 @@ defmodule Mix.Tasks.Authzura.CheckTest do
 
     assert {:ok, output} = run(@args)
     assert output =~ "0 denied"
-    assert output =~ "1 select permissions"
+    assert output =~ "1 select permissions, 0 functions"
   end
 
   test "warnings pass, and fail under --strict" do
@@ -99,6 +99,20 @@ defmodule Mix.Tasks.Authzura.CheckTest do
 
     assert {:ok, output} = run(@args)
     assert output =~ ~r/^warning - public\.key_kinds - user: .*incompatible_key_kinds/m
+  end
+
+  test "a function diagnostic prints fn:schema.name in the table position" do
+    HasuraFixture.put_metadata!(
+      Repo,
+      HasuraFixture.metadata([clean()],
+        functions: [%{function: %{schema: "api", name: "search"}, permissions: [%{role: 1}]}]
+      )
+    )
+
+    assert {{:shutdown, 1}, output} = run(@args)
+
+    assert output =~
+             ~r/^deny - fn:api\.search - functions\.0\.permissions\.0: :invalid_function_permission/m
   end
 
   test "does not log the queries it runs, even when the repo logs them" do

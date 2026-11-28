@@ -35,6 +35,7 @@ defmodule Authzura.HasuraFixture do
 
     * `:source` - the source name (default `"default"`)
     * `:inherited_roles` - top-level `inherited_roles` entries
+    * `:functions` - the built source's `functions` entries
     * `:sources` - extra source maps appended after the built one
   """
   @spec metadata([map()], keyword()) :: map()
@@ -45,6 +46,8 @@ defmodule Authzura.HasuraFixture do
       "tables" => Enum.map(tables, &json/1),
       "configuration" => %{"connection_info" => %{"database_url" => %{"from_env" => "PG_URL"}}}
     }
+
+    source = put_functions(source, Keyword.get(opts, :functions))
 
     %{"version" => 3, "sources" => [source | Enum.map(Keyword.get(opts, :sources, []), &json/1)]}
     |> put_inherited(Keyword.get(opts, :inherited_roles))
@@ -57,6 +60,11 @@ defmodule Authzura.HasuraFixture do
   @spec select_permissions(String.t(), [String.t()] | String.t(), map()) :: [map()]
   def select_permissions(role, columns, filter \\ %{}),
     do: [%{role: role, permission: %{columns: columns, filter: filter}}]
+
+  @doc "A `functions` entry granting execute on `function` (a name or `{schema, name}`) to `roles`."
+  @spec function_grants(String.t() | {String.t(), String.t()}, [String.t()]) :: map()
+  def function_grants(function, roles),
+    do: %{function: function, permissions: Enum.map(roles, &%{role: &1})}
 
   @doc "A manual object relationship entry."
   @spec object_relationship(String.t(), {String.t(), String.t()}, map()) :: map()
@@ -157,6 +165,9 @@ defmodule Authzura.HasuraFixture do
     {:ok, session} = Session.new(Map.put(vars, "x-hasura-role", role), [])
     session
   end
+
+  defp put_functions(source, nil), do: source
+  defp put_functions(source, functions), do: Map.put(source, "functions", json(functions))
 
   defp put_inherited(metadata, nil), do: metadata
   defp put_inherited(metadata, roles), do: Map.put(metadata, "inherited_roles", json(roles))
